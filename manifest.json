@@ -3,7 +3,7 @@
   "name": "Moodle Enhancer for Ritsumeikan",
   "version": "1.0.0",
   "description": "立命館大学Moodleからのダウンロードファイルを授業ごとにフォルダ分けします。",
-  "permissions": ["storage", "downloads"],
+  "permissions": ["storage", "downloads", "scripting"],
   "host_permissions": [
     "https://lms.ritsumei.ac.jp/*"
   ],
