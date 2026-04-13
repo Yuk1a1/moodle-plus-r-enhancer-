@@ -1,12 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "manaba+R Enhancer",
-  "version": "3.4.0",
-  "description": "manaba+Rのホーム画面に未提出課題一覧とカレンダーを追加し、GoogleカレンダーやTodoへの登録ができます。",
+  "name": "Moodle Enhancer for Ritsumeikan",
+  "version": "1.0.0",
+  "description": "立命館大学Moodleからのダウンロードファイルを授業ごとにフォルダ分けします。",
   "permissions": ["storage", "downloads"],
   "host_permissions": [
-    "https://ct.ritsumei.ac.jp/*",
-    "https://script.google.com/*"
+    "https://lms.ritsumei.ac.jp/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -14,13 +13,15 @@
   "content_scripts": [
     {
       "matches": [
-        "https://ct.ritsumei.ac.jp/ct/home",
-        "https://ct.ritsumei.ac.jp/ct/course*",
-        "https://ct.ritsumei.ac.jp/ct/page*"
+        "https://lms.ritsumei.ac.jp/course/view.php*",
+        "https://lms.ritsumei.ac.jp/course/section.php*",
+        "https://lms.ritsumei.ac.jp/mod/*"
       ],
-      "css": ["style.css", "vanilla-calendar.css"],
-      "js": ["vanilla-calendar.js", "content.js"]
+      "js": ["content.js"]
     }
   ],
-  "options_page": "options.html"
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
 }

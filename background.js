@@ -1,26 +1,39 @@
-// manaba-plus-r-enhancer/background.js
+// moodle-enhancer/background.js
+
+/**
+ * Moodleからのダウンロードを検知し、授業名でフォルダ分けするリスナー。
+ * 
+ * content.jsで保存されたコース名を使用し、以下の構造で保存する:
+ *   Moodle/[授業名]/[元のファイル名]
+ * 
+ * Moodle以外のサイトからのダウンロードには影響しない。
+ */
 chrome.downloads.onDeterminingFilename.addListener(function(downloadItem, suggest) {
-  // ★ 変更点: URLをチェックし、manabaドメインでなければ処理を中断
-  const manabaUrlPattern = "https://ct.ritsumei.ac.jp/ct/";
-  if (!downloadItem.referrer || !downloadItem.referrer.startsWith(manabaUrlPattern)) {
-    // manabaからのダウンロードではないため、何もしない
-    // suggestを呼ばずに終了することで、ブラウザのデフォルトのダウンロード処理に任せる
+  // Moodleドメインからのダウンロードかチェック
+  const moodleUrlPattern = "https://lms.ritsumei.ac.jp/";
+
+  // referrer または URL でMoodleからのダウンロードか判定
+  const isFromMoodle = 
+    (downloadItem.referrer && downloadItem.referrer.startsWith(moodleUrlPattern)) ||
+    (downloadItem.url && downloadItem.url.startsWith(moodleUrlPattern));
+
+  if (!isFromMoodle) {
+    // Moodleからのダウンロードではないため、何もしない
     return;
   }
 
-  // ★ 変更点: 授業名取得ロジックを使い、ファイルパスを生成する
+  // content.jsから保存された授業名を使用してファイルパスを生成
   chrome.storage.local.get(['currentCourseName'], function(result) {
-    // content_scriptから保存された授業名を使用する。なければデフォルト名。
-    let courseName = result.currentCourseName || "manaba-files";
+    let courseName = result.currentCourseName || "moodle-files";
 
     // ファイル名として不適切な文字を置換する
     const sanitizedCourseName = courseName.replace(/[\\/:*?"<>|]/g, '－');
     const originalFilename = downloadItem.filename;
 
-    // 新しいファイルパスを構築する (Manaba/[授業名]/[元のファイル名])
-    const newFilename = `Manaba/${sanitizedCourseName}/${originalFilename}`;
+    // 新しいファイルパスを構築する (Moodle/[授業名]/[元のファイル名])
+    const newFilename = `Moodle/${sanitizedCourseName}/${originalFilename}`;
 
-    console.log("Suggesting new filename:", newFilename);
+    console.log("Moodle Enhancer: Suggesting new filename:", newFilename);
 
     suggest({
       filename: newFilename,
