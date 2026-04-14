@@ -8,7 +8,7 @@
     "https://lms.ritsumei.ac.jp/*"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background/background.js"
   },
   "content_scripts": [
     {
@@ -17,11 +17,11 @@
         "https://lms.ritsumei.ac.jp/course/section.php*",
         "https://lms.ritsumei.ac.jp/mod/*"
       ],
-      "js": ["content.js"]
+      "js": ["src/content/content.js"]
     }
   ],
   "icons": {
-    "48": "icon48.png",
-    "128": "icon128.png"
+    "48": "src/assets/icon48.png",
+    "128": "src/assets/icon128.png"
   }
 }
