@@ -2,74 +2,80 @@
    時間割コンパクト化 — Moodle Enhancer
    =========================================================== */
 
-/* ラッパー: 上部に移動後のスタイル */
+/* ラッパー: 枠線だけ設定 (JSで作られるもの) */
 .me-timetable-wrapper {
+    margin-top: 1rem;
     margin-bottom: 1rem;
     border: 1px solid var(--bs-border-color, #dee2e6);
     border-radius: 8px;
-    overflow: hidden;
     background: var(--bs-body-bg, #fff);
 }
 
-/* テーブルレイアウト固定 */
-.me-timetable-wrapper table.timetable {
+/* 常にテーブルレイアウトを固定 */
+table.timetable {
     table-layout: fixed !important;
     width: 100% !important;
     margin: 0 !important;
 }
 
-/* セル高さ: 固定値 + min-height で安定化
-   目標: 7コマ + ヘッダ = テーブル全体 450px 以下 */
-.me-timetable-wrapper table.timetable td,
-.me-timetable-wrapper table.timetable th {
-    height: 55px !important;
-    max-height: 55px !important;
-    padding: 3px 5px !important;
-    overflow: hidden !important;
-    vertical-align: top !important;
+/* ★ Moodleに絶対負けないセル高さの圧縮 ★ */
+table.timetable td,
+table.timetable th {
+    height: 35px !important;
+    max-height: 35px !important;
+    padding: 2px 4px !important;
+    vertical-align: middle !important;
+    /* ツールチップが切れるのを防ぐ */
+    overflow: visible !important;
     box-sizing: border-box !important;
 }
 
 /* 授業セル */
-.me-timetable-wrapper table.timetable td.highlight {
+table.timetable td.highlight {
     position: relative !important;
     cursor: pointer !important;
 }
 
-.me-timetable-wrapper table.timetable td.highlight a {
+/* 子要素（とくに subjects div）の膨張を完全に禁止 */
+table.timetable td.highlight > div,
+table.timetable td.highlight > div *,
+table.timetable td.highlight a {
     display: block !important;
-    height: 100% !important;
+    max-height: 28px !important;
     width: 100% !important;
-    font-size: clamp(0.6rem, 1.1vw, 0.8rem) !important;
+    max-width: 100% !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    font-size: clamp(0.6rem, 1.1vw, 0.75rem) !important;
     line-height: 1.2 !important;
     text-decoration: none !important;
-    overflow: hidden !important;
     color: inherit !important;
+    box-sizing: border-box !important;
 }
 
 /* 時限ヘッダ */
-.me-timetable-wrapper table.timetable td.time {
-    width: 28px !important;
+table.timetable td.time {
+    width: 24px !important;
     text-align: center !important;
     font-weight: bold !important;
-    font-size: 0.75rem !important;
+    font-size: 0.7rem !important;
 }
 
 /* ホバー/タップ時のツールチップ */
-.me-timetable-wrapper table.timetable td.highlight:hover,
-.me-timetable-wrapper table.timetable td.highlight.me-tooltip-active {
-    overflow: visible !important;
+table.timetable td.highlight:hover,
+table.timetable td.highlight.me-tooltip-active {
     z-index: 100 !important;
 }
 
-.me-timetable-wrapper table.timetable td.highlight:hover::after,
-.me-timetable-wrapper table.timetable td.highlight.me-tooltip-active::after {
+table.timetable td.highlight:hover::after,
+table.timetable td.highlight.me-tooltip-active::after {
     content: attr(data-tooltip);
     position: absolute;
-    top: -2px;
-    left: -2px;
-    right: -2px;
-    min-height: calc(100% + 4px);
+    top: -4px;
+    left: -4px;
+    right: -4px;
+    min-height: calc(100% + 8px);
     padding: 8px;
     background: var(--bs-body-bg, #fff);
     border: 2px solid var(--bs-primary, #0d6efd);
@@ -84,6 +90,6 @@
 }
 
 /* 空セルの背景 */
-.me-timetable-wrapper table.timetable td.empty {
+table.timetable td.empty {
     background: var(--bs-light, #f8f9fa) !important;
 }
