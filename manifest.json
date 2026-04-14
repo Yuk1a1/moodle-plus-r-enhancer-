@@ -32,6 +32,12 @@
       "js": ["src/content/force-download.js"],
       "css": ["src/content/force-download.css"],
       "run_at": "document_end"
+    },
+    {
+      "matches": ["https://lms.ritsumei.ac.jp/my/*"],
+      "js": ["src/content/timetable-compact.js"],
+      "css": ["src/content/timetable-compact.css"],
+      "run_at": "document_idle"
     }
   ],
   "icons": {
