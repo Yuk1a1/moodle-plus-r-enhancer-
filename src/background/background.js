@@ -34,12 +34,9 @@ function extractCourseIdFromUrl(url) {
       return urlObj.searchParams.get("id");
     }
 
-    // URLのパスに course-XXXXX パターンがある場合（稀だが対応）
-    // referrer URLから /course/view.php?id= パターンを探す
-    if (urlObj.pathname.startsWith("/course/")) {
-      const id = urlObj.searchParams.get("id");
-      if (id) return id;
-    }
+    // 注意: /course/section.php 等の他の /course/ パスの id は
+    // コースIDではないため、ここでは取得しない。
+    // タブのbodyクラス経由で正しいコースIDを取得する。
   } catch (e) {
     // URL解析失敗
   }
