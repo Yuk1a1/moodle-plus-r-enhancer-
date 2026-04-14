@@ -20,19 +20,14 @@
             return;
         }
 
-        // 既に移動済みの場合は何もしない
+        // 既に包んである場合は何もしない
         if (timetableContainer.parentNode.classList.contains('me-timetable-wrapper')) return;
 
-        // 時間割をページの主要コンテンツエリアの先頭に移動
-        const mainContent = document.querySelector('#region-main .card-body, #region-main');
-        if (mainContent) {
-            // 元の位置から削除して先頭に挿入
-            const wrapper = document.createElement('div');
-            wrapper.className = 'me-timetable-wrapper';
-            wrapper.appendChild(timetableContainer);
-            mainContent.prepend(wrapper);
-            console.log('[Moodle Enhancer] 時間割をページ上部に移動しました。');
-        }
+        // 元の位置のままラッパーで包み、CSSを適用できるようにする
+        const wrapper = document.createElement('div');
+        wrapper.className = 'me-timetable-wrapper';
+        timetableContainer.parentNode.insertBefore(wrapper, timetableContainer);
+        wrapper.appendChild(timetableContainer);
 
         // セルにツールチップデータを設定
         const cells = timetableContainer.querySelectorAll('table.timetable td.highlight');
