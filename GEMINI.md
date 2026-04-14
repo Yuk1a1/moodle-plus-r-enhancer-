@@ -1,47 +1,44 @@
 # GEMINI.md - Moodle Enhancer for Ritsumeikan
 
-## Project Overview
+## 1. Project Overview
 
 This project is a Chrome browser extension called "Moodle Enhancer for Ritsumeikan". Its purpose is to improve the user experience of the Ritsumeikan University Moodle LMS (`lms.ritsumei.ac.jp`).
 
-The extension was migrated from the previous "manaba+R Enhancer" (which targeted `ct.ritsumei.ac.jp`) when the university switched from manaba+R to Moodle.
+*   **Phase 1 (Completed):** Automatic Download Organization. Sorts downloaded files into `Moodle/[Course Name]/[Original Filename]` using Moodle AJAX APIs (`core_course_get_courses_by_field`) and DOM analysis.
+*   **Phase 2 (Ready for Implementation):** Moodle UX Overhaul. Includes Inline Course Expanders, Forced PDF Downloads, and Timetable Compacting. Detailed specs are located in `docs/phase2_requirements.md`.
 
-### Current Features (Phase 1)
+## 2. Directory Structure & Architecture
 
-1.  **Automatic Download Organization:** It automatically sorts files downloaded from Moodle into a structured folder hierarchy: `Moodle/[Course Name]/[Original Filename]`. The course name is extracted from the page header (`h1`) or breadcrumb navigation on course and module pages.
+The project has been refactored into a modern application structure:
 
-### Planned Features (Future Phases)
+```
+src/
+├── background/
+│   └── background.js        (Service worker handling downloads via chrome.downloads API)
+├── content/
+│   ├── content.js           (Main content script, extracts sesskey and injects features)
+│   └── (Phase 2 files will go here, e.g., force-download.js, timetable-compact.css)
+├── lib/                     (Shared logic)
+└── assets/                  (Icons)
+docs/
+├── phase2_requirements.md   (CRITICAL: Read this before starting Phase 2 work)
+├── moodle_api_guide.md      (Guide on how to utilize Moodle AJAX Web Services)
+└── architecture.md
+manifest.json                (Manifest V3)
+```
 
-2.  **Enhanced Dashboard:** (Phase 2) Inject unsubmitted assignment lists and a deadline calendar into the Moodle dashboard.
-3.  **Google Calendar Integration:** (Phase 3) Register assignments to Google Calendar via Google Apps Script (GAS).
+## 3. Essential Moodle Development Context
 
-## Building and Running
+If you are an AI tasked with developing features for this extension, you MUST adhere to the following Moodle specifics:
 
-There is no build process for this extension. To run or test the extension, load it directly into a Chromium-based browser:
+1.  **API-First Approach**: Always try to fetch data (`core_course_get_contents`, `core_calendar_get_action_events_by_timesort`, etc.) using Moodle's built-in AJAX endpoint (`/lib/ajax/service.php`) rather than scraping the DOM, to prevent breakage when Moodle themes update.
+2.  **Authentication (`sesskey`)**: You cannot call the Moodle API without a `sesskey`. In this extension, the content script (`content.js`) scrapes the `sesskey` from the logout link or hidden inputs on the page. Use this key when constructing Fetch API requests.
+3.  **Forced Downloads**: To force a file on Moodle to download rather than open in the browser's PDF viewer, append `?forcedownload=1` (or `&forcedownload=1`) to the `pluginfile.php` URL.
+4.  **Content Security Policy (CSP)**: Do not inject inline scripts via `document.createElement('script')` into the DOM, as it violates the extension's CSP. Always extract information visually or via standard `chrome.scripting.executeScript` from the background if needed.
 
-1.  Open your browser and navigate to the extensions page (`chrome://extensions` or `edge://extensions`).
-2.  Enable "Developer mode".
-3.  Click the "Load unpacked" button.
-4.  Select the folder where the `manifest.json` file is located.
+## 4. Instructions for AI Assistant
 
-## Development Conventions
-
-*   **Code Style:** Modern JavaScript (ES6+) with `camelCase` naming. JSDoc comments for all functions.
-*   **Dependencies:** No package manager. Third-party libraries are included directly.
-*   **File Structure:**
-    *   `manifest.json`: Core Chrome extension configuration.
-    *   `content.js`: Content script that extracts and stores the current course name from Moodle pages.
-    *   `background.js`: Service worker that intercepts downloads and organizes files into course-named folders.
-    *   `style.css`: CSS rules for UI enhancements (Phase 2+).
-    *   `options.html` / `options.js`: Settings page for GAS integration (Phase 3).
-    *   Legacy files (`vanilla-calendar.*`, `GAS_SETUP.md`) are retained for future phases.
-
-## Migration Notes (from manaba+R)
-
-| Aspect | manaba+R | Moodle |
-|--------|----------|--------|
-| Domain | `ct.ritsumei.ac.jp` | `lms.ritsumei.ac.jp` |
-| Course name selector | `#coursename` | `.page-header-headings h1` or `.breadcrumb-item a` |
-| File download URL | Direct links from course pages | `pluginfile.php/...` or `mod/resource/view.php` |
-| Course URL pattern | `/ct/course_*` | `/course/view.php?id=*` |
-| Course name format | `番号:科目名` (§ separated) | Same format |
+Before starting any new implementation or modification:
+1.  Read `docs/phase2_requirements.md` to understand the target features and UX goals.
+2.  Verify the current state of `src/content/` to see what has already been implemented.
+3.  Always respond in Japanese as requested by the user's global rules, and prioritize clean, modular code.
