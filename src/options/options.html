@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Moodle Enhancer 設定</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 480px; margin: 2rem auto; padding: 0 1rem; color: #333; }
+        h1 { font-size: 1.2rem; margin-bottom: 1.5rem; }
+        .setting { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
+        .setting-label { font-size: 0.9rem; }
+        .setting-desc { font-size: 0.75rem; color: #888; margin-top: 2px; }
+        .toggle { position: relative; width: 44px; height: 24px; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle .slider { position: absolute; inset: 0; background: #ccc; border-radius: 24px; cursor: pointer; transition: 0.2s; }
+        .toggle .slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.2s; }
+        .toggle input:checked + .slider { background: #0d6efd; }
+        .toggle input:checked + .slider::before { transform: translateX(20px); }
+        .saved { color: #198754; font-size: 0.8rem; opacity: 0; transition: opacity 0.3s; margin-top: 1rem; }
+        .saved.show { opacity: 1; }
+    </style>
+</head>
+<body>
+    <h1>⚙️ Moodle Enhancer 設定</h1>
+
+    <div class="setting">
+        <div>
+            <div class="setting-label">📥 PDF 自動ダウンロード</div>
+            <div class="setting-desc">リソースページでPDFを自動ダウンロードします</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="forceDownload" checked><span class="slider"></span></label>
+    </div>
+
+    <div class="setting">
+        <div>
+            <div class="setting-label">📅 時間割コンパクト化</div>
+            <div class="setting-desc">ダッシュボードの時間割を縮小して上部に移動します</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="timetableCompact" checked><span class="slider"></span></label>
+    </div>
+
+    <div class="setting">
+        <div>
+            <div class="setting-label">📂 コースコンテンツ展開</div>
+            <div class="setting-desc">コースページでセクションをインライン展開します</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="courseExpander" checked><span class="slider"></span></label>
+    </div>
+
+    <p class="saved" id="savedMsg">✅ 設定を保存しました</p>
+
+    <script src="options.js"></script>
+</body>
+</html>

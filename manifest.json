@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
   "name": "Moodle Enhancer for Ritsumeikan",
-  "version": "1.0.0",
-  "description": "立命館大学Moodleからのダウンロードファイルを授業ごとにフォルダ分けします。",
-  "permissions": ["storage", "downloads", "scripting"],
+  "version": "1.1.0",
+  "description": "立命館大学Moodleのダウンロード整理・コース展開・時間割コンパクト化",
+  "permissions": ["storage", "downloads"],
   "host_permissions": [
     "https://lms.ritsumei.ac.jp/*"
   ],
   "background": {
     "service_worker": "src/background/background.js"
   },
+  "options_page": "src/options/options.html",
   "content_scripts": [
     {
       "matches": [
@@ -22,6 +23,15 @@
         "src/content/content.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://lms.ritsumei.ac.jp/mod/resource/view.php*",
+        "https://lms.ritsumei.ac.jp/mod/folder/view.php*"
+      ],
+      "js": ["src/content/force-download.js"],
+      "css": ["src/content/force-download.css"],
+      "run_at": "document_end"
     }
   ],
   "icons": {

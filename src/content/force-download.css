@@ -1,0 +1,18 @@
+/* force-download.css — 自動DLの通知バナー */
+.me-download-notice {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    padding: 12px 20px;
+    background: var(--bs-success, #198754);
+    color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    font-size: 0.9rem;
+    z-index: 9999;
+    transition: opacity 0.5s ease;
+}
+
+.me-download-notice.me-fade-out {
+    opacity: 0;
+}

@@ -209,10 +209,54 @@ async function resolveCourseName(courseId) {
 }
 
 // =============================================================================
+// FORCE_DOWNLOAD による自動ダウンロード 
+// =============================================================================
+
+// FORCE_DOWNLOAD 経由で開始されたダウンロードの ID を記録
+// onDeterminingFilename での二重フォルダ分けを防止するため
+const forceDownloadIds = new Set();
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'FORCE_DOWNLOAD') {
+        (async () => {
+            try {
+                // 既存の解決ロジック（キャッシュ優先）を使う
+                const courseName = await resolveCourseName(message.courseId);
+                const sanitizedCourseName = sanitizeForFilename(courseName);
+
+                // chrome.downloads.download API で直接ダウンロード
+                // filename に指定されたパスでフォルダ分けが実行される
+                const downloadId = await chrome.downloads.download({
+                    url: message.url,
+                    filename: `Moodle/${sanitizedCourseName}/`,
+                    conflictAction: 'uniquify'
+                });
+
+                if (downloadId) {
+                    forceDownloadIds.add(downloadId);
+                }
+                bgLog("F2 自動DL開始 ID:", downloadId, `(フォルダ: ${sanitizedCourseName})`);
+            } catch (error) {
+                bgWarn("F2 自動DLエラー:", error);
+            }
+        })();
+        return false;
+    }
+});
+
+// =============================================================================
 // ダウンロードファイル名の決定
 // =============================================================================
 
 chrome.downloads.onDeterminingFilename.addListener(function (downloadItem, suggest) {
+    // FORCE_DOWNLOAD 経由のDLはスキップ（既にフォルダ指定済み）
+    if (forceDownloadIds.has(downloadItem.id)) {
+        forceDownloadIds.delete(downloadItem.id);
+        bgLog(`二重フォルダ分け防止: DL-ID ${downloadItem.id} をスキップします`);
+        suggest({ filename: downloadItem.filename });
+        return true; 
+    }
+
     const moodleUrlPattern = 'https://lms.ritsumei.ac.jp/';
 
     // referrer または URL で Moodle からのダウンロードか判定
