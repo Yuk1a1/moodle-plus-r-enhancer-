@@ -29,10 +29,8 @@ function extractCourseIdFromUrl(url) {
     const urlObj = new URL(url);
 
     // /course/view.php?id=XXXXX → コースID直接
-    if (
-      urlObj.pathname === "/course/view.php" ||
-      urlObj.pathname === "/course/section.php"
-    ) {
+    // 注意: /course/section.php?id=XXXXX の id はセクションIDでありコースIDではない
+    if (urlObj.pathname === "/course/view.php") {
       return urlObj.searchParams.get("id");
     }
 
