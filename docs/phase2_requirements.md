@@ -66,14 +66,18 @@ sequenceDiagram
 *   **各アクティビティ**: `li.activity` (クラスに `modtype_resource`, `modtype_folder`, `modtype_assign` 等)
 *   **リソースリンク**: `a.aalink.stretched-link` (メインのクリック可能リンク)
 
-#### 展開時に表示する情報（各モジュール1行）
-| 表示項目 | ソース |
+#### 展開時に表示する情報と階層構造（フォルダ対応）
+ただフラットに並べるだけでは、「授業資料」と「補足資料」のフォルダの違いが分からなくなるため、以下のように階層構造とカード型のUIデザインを維持して展開します。
+
+*   **UIデザイン**: 展開されたリストは、Moodleの本来のデザインから浮かないようにしつつ、視認性の高いカード型（背景の微小な色分けと丸みを帯びた枠線）で描画します。
+*   **フォルダ階層の維持**: 取得したAPIデータ（`module.modname === 'folder'`）の中にさらにファイルがある場合、**インデントを下げる・左側に縦線を引く**などをして、「この資料は『補足資料』フォルダの中身である」ことが視覚的に瞬時に分かるツリー構造のUIを採用します。
+
+| 表示項目 (リストの1行) | ソース |
 |----------|--------|
 | アイコン | `module.modicon` |
-| 資料名 | `module.name` |
-| 種別ラベル | `module.modname` ("resource"→📄, "assign"→📝, "quiz"→✏️, "url"→🔗, "folder"→📁) |
-| ダウンロードリンク (資料の場合) | `module.contents[0].fileurl` + `?forcedownload=1` |
-| 期限 (課題・小テストの場合) | (API追加取得が必要。初期リリースは非表示も可) |
+| 資料名・フォルダ名 | `module.name` |
+| 種別タグ | `module.modname` ("resource"→📄, "assign"→📝, "folder"→📁 等) |
+| ダウンロードリンク (PDFの場合) | `module.contents[0].fileurl` + ファイルチェック |
 
 #### 実装ファイル
 *   `src/content/course-expander.js` [NEW] — メインのUI構成ロジック
@@ -205,16 +209,28 @@ table.timetable {
     width: 100% !important;
 }
 
-/* 各セルの高さを均一に制限 */
-table.timetable td {
+/* 各セルの高さを均一に制限しつつ、クリック判定を維持 */
+table.timetable td, table.timetable th {
     height: 60px !important;
     max-height: 60px !important;
-    padding: 4px 6px !important;
+    padding: 2px !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     vertical-align: top !important;
-    font-size: 0.8rem !important;
-    line-height: 1.2 !important;
+}
+
+/* 授業のセル（ハイライト部）の中身とリンク保護 */
+table.timetable td.highlight {
+    position: relative;
+}
+
+table.timetable td.highlight a {
+    display: block;
+    height: 100%;
+    width: 100%;
+    font-size: 0.75rem !important;
+    line-height: 1.1 !important;
+    text-decoration: none !important;
 }
 
 /* 時限のヘッダセル */
@@ -223,16 +239,26 @@ table.timetable td.time {
     text-align: center !important;
 }
 
-/* ホバー時にツールチップで全文表示 */
+/* ホバー時にツールチップで全文表示＆クリック領域の最前面化 */
 table.timetable td.highlight:hover {
     overflow: visible !important;
-    position: relative;
     z-index: 10;
+}
+table.timetable td.highlight:hover > div {
+    /* 展開されるツールチップ風のコンテナ */
+    background: inherit;
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    min-height: 100%;
+    padding: 6px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    border-radius: 4px;
 }
 ```
 
-#### hover時の拡大ツールチップ
-セルが小さくなるため、科目名が切れる可能性がある。CSSの`:hover`で一時的に重なりを許可してフル表示するか、JavaScriptでマウスオーバー時にツールチップを表示する。
+#### hover時の拡大ツールチップとクリック保護
+時間割のセル（`.highlight`）は、授業ページへ飛ぶ重要なリンク（`<a>` レイヤ）を含んでいます。`overflow: hidden` で見た目を切り詰める際、`pointer-events` の崩れや z-index の干渉によって**「クリックして授業ページに飛べない」という致命的バグが発生しないよう**に、アンカータグ `<a>` 自体をブロック化してセルの全面を覆う設計にします。
+また、ホバー時に省略された文字が見えるようにする際は、親要素を広げるのではなく、内部の `<div>` を絶対配置(`position: absolute`)で浮き上がらせて元のリンククリックを妨害しない実装とします。
 
 #### 実装ファイル
 *   `src/content/timetable-compact.css` [NEW] — 時間割コンパクト化CSS
