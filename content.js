@@ -8,17 +8,6 @@ console.log("Moodle Enhancer: content.js is running.");
  * @returns {string|null} sesskey
  */
 function getSesskey() {
-    // 方法1: スクリプト注入で M.cfg.sesskey を取得
-    try {
-        const script = document.createElement('script');
-        script.textContent = 'document.body.dataset.moodleSesskey = M.cfg.sesskey;';
-        document.head.appendChild(script);
-        script.remove();
-        const sesskey = document.body.dataset.moodleSesskey;
-        if (sesskey) return sesskey;
-    } catch (e) {
-        console.warn("Moodle Enhancer: スクリプト注入によるsesskey取得失敗:", e);
-    }
 
     // 方法2: ログアウトリンクから取得
     const logoutLink = document.querySelector('a[href*="logout.php?sesskey="]');
