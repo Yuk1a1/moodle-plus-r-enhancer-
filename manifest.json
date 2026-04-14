@@ -17,7 +17,11 @@
         "https://lms.ritsumei.ac.jp/course/section.php*",
         "https://lms.ritsumei.ac.jp/mod/*"
       ],
-      "js": ["src/content/content.js"]
+      "js": [
+        "src/lib/moodle-api.js",
+        "src/content/content.js"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "icons": {

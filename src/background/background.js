@@ -1,11 +1,12 @@
 // moodle-enhancer/background.js
 
 /**
- * Moodleからのダウンロードを検知し、授業名でフォルダ分けするリスナー。
+ * @fileoverview
+ * Moodle からのダウンロードを検知し、授業名でフォルダ分けする Service Worker。
  *
- * ダウンロードURLまたはreferrer URLからコースIDを特定し、
- * content.jsで蓄積されたコースID→コース名マッピングから正しい授業名を取得する。
- * マッピングに存在しない場合は、Moodle Web Service APIを使って解決を試みる。
+ * ダウンロード URL または referrer URL からコースIDを特定し、
+ * content.js が蓄積したコースID→コース名マッピング（chrome.storage）から正しい授業名を取得する。
+ * マッピングに存在しない場合は、content.js にメッセージを送って API 経由で取得を委任する。
  *
  * 保存構造: Moodle/[授業名]/[元のファイル名]
  *
@@ -13,288 +14,258 @@
  * suggest() を呼び出す必要がある。呼び出さないとダウンロードがハングする。
  */
 
-/**
- * URLからMoodleのコースIDを抽出する。
- * 対応パターン:
- *   - /course/view.php?id=XXXXX
- *   - /mod/resource/view.php?id=XXXXX (→ cmid なので直接使えないが referrer に course id がある場合)
- *   - /pluginfile.php/XXXXX/... (最初の数値はコンテキストID、コースIDではない)
- *   - /course/section.php?id=XXXXX
- * @param {string} url - 解析するURL
- * @returns {string|null} コースID
- */
-function extractCourseIdFromUrl(url) {
-  if (!url) return null;
-  try {
-    const urlObj = new URL(url);
+// =============================================================================
+// ログユーティリティ（Service Worker 用）
+// =============================================================================
 
-    // /course/view.php?id=XXXXX → コースID直接
-    // 注意: /course/section.php?id=XXXXX の id はセクションIDでありコースIDではない
-    if (urlObj.pathname === "/course/view.php") {
-      return urlObj.searchParams.get("id");
+const BG_DEBUG = false;
+const BG_LOG_PREFIX = '[Moodle Enhancer BG]';
+
+function bgLog(...args) {
+    if (BG_DEBUG) console.log(BG_LOG_PREFIX, ...args);
+}
+
+function bgWarn(...args) {
+    console.warn(BG_LOG_PREFIX, ...args);
+}
+
+// =============================================================================
+// ファイル名サニタイズ（Service Worker 用）
+// =============================================================================
+// NOTE: moodle-api.js は Content Script 用であり、Service Worker から直接参照できない。
+// そのため、sanitizeForFilename のロジックをここにも配置する。
+// Phase 2 で ES Modules 移行時に統合予定。
+
+/**
+ * 文字列をファイル名として安全な形式にサニタイズする。
+ * @param {string} name - サニタイズ対象の文字列
+ * @param {string} [fallback='moodle-files'] - 空文字列時のフォールバック
+ * @returns {string} サニタイズ済みの文字列
+ */
+function sanitizeForFilename(name, fallback = 'moodle-files') {
+    if (!name) return fallback;
+
+    let sanitized = name;
+
+    // 制御文字を除去 (ASCII 0-31)
+    sanitized = sanitized.replace(/[\x00-\x1f]/g, '');
+
+    // ファイル名に使えない文字を全角ハイフンに置換
+    sanitized = sanitized.replace(/[\\/:*?"<>|]/g, '－');
+
+    // 末尾のピリオドとスペースを除去
+    sanitized = sanitized.replace(/[. ]+$/, '');
+
+    // 先頭のスペースを除去
+    sanitized = sanitized.replace(/^ +/, '');
+
+    // Windows 予約語チェック
+    const RESERVED_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
+    if (RESERVED_NAMES.test(sanitized)) {
+        sanitized = `_${sanitized}`;
     }
 
-    // 注意: /course/section.php 等の他の /course/ パスの id は
-    // コースIDではないため、ここでは取得しない。
-    // タブのbodyクラス経由で正しいコースIDを取得する。
-  } catch (e) {
-    // URL解析失敗
-  }
-  return null;
+    if (!sanitized) return fallback;
+    return sanitized;
 }
 
+// =============================================================================
+// URL からのコースID抽出
+// =============================================================================
+
 /**
- * ダウンロードURLからコンテキストIDを抽出し、
- * Moodle Web Service APIでコースIDを解決する。
- * pluginfile.php/[contextId]/... のパターンに対応。
- * @param {string} url - ダウンロードURL
- * @returns {Promise<string|null>} コースID
+ * URL から Moodle のコースIDを抽出する。
+ * /course/view.php?id=XXXXX のパターンのみに対応。
+ *
+ * 注意: /course/section.php?id=XXXXX の id はセクションIDであり コースIDではない。
+ *       /mod/xxx/view.php?id=XXXXX の id は cmid (コースモジュールID) であり コースIDではない。
+ *       /pluginfile.php/XXXXX/... の数値はコンテキストIDであり コースIDではない。
+ *
+ * @param {string} url - 解析する URL
+ * @returns {string|null} コースID。該当しない場合は null。
  */
-async function resolveContextIdToCourseId(url) {
-  if (!url) return null;
-  try {
-    const urlObj = new URL(url);
-    // /pluginfile.php/123456/mod_resource/content/1/file.pdf
-    const pluginfileMatch = urlObj.pathname.match(
-      /\/pluginfile\.php\/(\d+)\//
-    );
-    if (!pluginfileMatch) return null;
-
-    const contextId = pluginfileMatch[1];
-
-    // コンテキストIDからコースIDへの変換は Web Service API が必要だが、
-    // background.js からは cookie ベースの認証が使えるので fetch で直接呼べる
-    // ただし sesskey が必要なので、content.js から渡してもらう必要がある
-    // → 代わりに、pluginfile URL のパス構造からコース情報を推測する
-
-    // pluginfile のコンテキストIDをキャッシュとして使い、
-    // content.js が構築したマッピングから探す
+function extractCourseIdFromUrl(url) {
+    if (!url) return null;
+    try {
+        const urlObj = new URL(url);
+        if (urlObj.pathname === '/course/view.php') {
+            return urlObj.searchParams.get('id');
+        }
+    } catch (e) {
+        // URL 解析失敗
+    }
     return null;
-  } catch (e) {
-    return null;
-  }
 }
 
+// =============================================================================
+// タブからのコースID取得（メッセージパッシング方式）
+// =============================================================================
+
 /**
- * referrer URLのタブからコースIDを取得する。
- * タブのURLを直接パースしてコースIDを特定する。
- * また、mod/xxx/view.php ページの場合は、そのタブの content.js が
- * すでにコースIDをbodyクラスから抽出して保存しているはずなので、
- * タブにスクリプトを注入してコースIDを取得する。
+ * referrer URL に対応するタブの content.js にメッセージを送り、コースIDを取得する。
+ * body クラスの `course-XXXXX` パターンから正確なコースIDを得る。
+ *
  * @param {string} referrerUrl - referrer URL
  * @returns {Promise<string|null>} コースID
  */
 async function getCourseIdFromTab(referrerUrl) {
-  if (!referrerUrl) return null;
+    if (!referrerUrl) return null;
 
-  try {
-    // referrer URLがコースページの場合、直接IDを抽出
-    const directId = extractCourseIdFromUrl(referrerUrl);
-    if (directId) return directId;
+    try {
+        // referrer URL がコースページの場合、直接IDを抽出
+        const directId = extractCourseIdFromUrl(referrerUrl);
+        if (directId) return directId;
 
-    // referrer URLが mod/xxx/view.php の場合、
-    // そのタブを見つけてコースIDを問い合わせる
-    const tabs = await chrome.tabs.query({
-      url: "https://lms.ritsumei.ac.jp/*",
-    });
+        // Moodle のタブを検索
+        const tabs = await chrome.tabs.query({
+            url: 'https://lms.ritsumei.ac.jp/*'
+        });
 
-    for (const tab of tabs) {
-      if (tab.url === referrerUrl || tab.url.startsWith(referrerUrl)) {
+        // referrer URL に一致するタブを探して content.js に問い合わせ
+        let referrerNormalized;
         try {
-          // タブ内でbodyクラスからコースIDを取得
-          const results = await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: () => {
-              const match = document.body.className.match(/course-(\d+)/);
-              return match ? match[1] : null;
-            },
-          });
-          if (results && results[0] && results[0].result) {
-            return results[0].result;
-          }
+            referrerNormalized = new URL(referrerUrl);
+            referrerNormalized.hash = '';
         } catch (e) {
-          console.warn(
-            "Moodle Enhancer: タブへのスクリプト注入失敗:",
-            e
-          );
+            return null;
         }
-      }
+
+        for (const tab of tabs) {
+            try {
+                const tabNormalized = new URL(tab.url);
+                tabNormalized.hash = '';
+
+                if (tabNormalized.href === referrerNormalized.href) {
+                    const response = await chrome.tabs.sendMessage(tab.id, {
+                        type: 'GET_COURSE_ID'
+                    });
+                    if (response?.courseId) {
+                        return response.courseId;
+                    }
+                }
+            } catch (e) {
+                // このタブでは content.js が応答しない（まだ読み込まれていない等）
+            }
+        }
+    } catch (e) {
+        bgWarn('タブからのコースID取得失敗:', e.message);
     }
-  } catch (e) {
-    console.warn("Moodle Enhancer: タブからのコースID取得失敗:", e);
-  }
-  return null;
+    return null;
 }
+
+// =============================================================================
+// コース名の解決
+// =============================================================================
 
 /**
  * コースIDからコース名を解決する。
- * 1. chrome.storage のキャッシュを確認
- * 2. キャッシュにない場合、Moodleのタブを使ってAPIで取得
+ *
+ * 解決戦略:
+ *   1. chrome.storage のキャッシュを確認
+ *   2. キャッシュにない場合、Moodle のタブの content.js に API 呼び出しを委任
+ *
  * @param {string} courseId - コースID
- * @returns {Promise<string>} コース名（取得失敗時は "moodle-files"）
+ * @returns {Promise<string>} コース名。取得失敗時は 'moodle-files'。
  */
 async function resolveCourseName(courseId) {
-  if (!courseId || courseId === "1") return "moodle-files";
+    if (!courseId || courseId === '1') return 'moodle-files';
 
-  // 1. キャッシュ確認
-  const result = await chrome.storage.local.get(["courseNames"]);
-  const courseNames = result.courseNames || {};
-  if (courseNames[courseId]) {
-    console.log(
-      "Moodle Enhancer: キャッシュからコース名取得:",
-      courseId,
-      "→",
-      courseNames[courseId]
-    );
-    return courseNames[courseId];
-  }
-
-  // 2. Moodle のタブを見つけて API 呼び出しを委任
-  try {
-    const tabs = await chrome.tabs.query({
-      url: "https://lms.ritsumei.ac.jp/*",
-    });
-    if (tabs.length > 0) {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tabs[0].id },
-        func: async (cId) => {
-          // sesskey を取得
-          let sesskey = null;
-          try {
-            sesskey = M.cfg.sesskey;
-          } catch (e) {
-            /* ignore */
-          }
-          if (!sesskey) {
-            const link = document.querySelector(
-              'a[href*="logout.php?sesskey="]'
-            );
-            if (link) sesskey = new URL(link.href).searchParams.get("sesskey");
-          }
-          if (!sesskey) return null;
-
-          // API呼び出し
-          try {
-            const resp = await fetch(
-              `/lib/ajax/service.php?sesskey=${sesskey}&info=core_course_get_courses_by_field`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify([
-                  {
-                    index: 0,
-                    methodname: "core_course_get_courses_by_field",
-                    args: { field: "id", value: cId },
-                  },
-                ]),
-              }
-            );
-            const data = await resp.json();
-            const courses = data[0]?.data?.courses;
-            if (courses && courses.length > 0) {
-              return courses[0].fullname;
-            }
-          } catch (err) {
-            return null;
-          }
-          return null;
-        },
-        args: [courseId],
-      });
-
-      if (results && results[0] && results[0].result) {
-        const fullname = results[0].result;
-        let name = fullname;
-
-        // § で区切られている場合、最初のコース名を使用
-        const sectionIndex = name.indexOf("§");
-        if (sectionIndex !== -1) {
-          name = name.substring(0, sectionIndex).trim();
-        }
-        // コース番号を削除
-        name = name.replace(/^\d+:/, "").trim();
-
-        // キャッシュに保存
-        courseNames[courseId] = name;
-        await chrome.storage.local.set({ courseNames: courseNames });
-        console.log(
-          "Moodle Enhancer: APIからコース名を取得してキャッシュ:",
-          courseId,
-          "→",
-          name
-        );
-        return name;
-      }
+    // 1. キャッシュ確認
+    const result = await chrome.storage.local.get(['courseNames']);
+    const courseNames = result.courseNames || {};
+    if (courseNames[courseId]) {
+        bgLog('キャッシュからコース名取得:', courseId, '→', courseNames[courseId]);
+        return courseNames[courseId];
     }
-  } catch (e) {
-    console.warn("Moodle Enhancer: APIによるコース名解決失敗:", e);
-  }
 
-  return "moodle-files";
+    // 2. Moodle のタブに問い合わせ（メッセージパッシング）
+    try {
+        const tabs = await chrome.tabs.query({
+            url: 'https://lms.ritsumei.ac.jp/*'
+        });
+
+        for (const tab of tabs) {
+            try {
+                const response = await chrome.tabs.sendMessage(tab.id, {
+                    type: 'RESOLVE_COURSE_NAME',
+                    courseId: courseId
+                });
+                if (response?.name) {
+                    // キャッシュに保存
+                    courseNames[courseId] = response.name;
+                    await chrome.storage.local.set({ courseNames });
+                    bgLog('API から取得してキャッシュ:', courseId, '→', response.name);
+                    return response.name;
+                }
+            } catch (e) {
+                // このタブでは content.js が応答しない
+            }
+        }
+    } catch (e) {
+        bgWarn('API によるコース名解決失敗:', e.message);
+    }
+
+    return 'moodle-files';
 }
 
-chrome.downloads.onDeterminingFilename.addListener(function (
-  downloadItem,
-  suggest
-) {
-  const moodleUrlPattern = "https://lms.ritsumei.ac.jp/";
+// =============================================================================
+// ダウンロードファイル名の決定
+// =============================================================================
 
-  // referrer または URL で Moodle からのダウンロードか判定
-  const isFromMoodle =
-    (downloadItem.referrer &&
-      downloadItem.referrer.startsWith(moodleUrlPattern)) ||
-    (downloadItem.url && downloadItem.url.startsWith(moodleUrlPattern));
+chrome.downloads.onDeterminingFilename.addListener(function (downloadItem, suggest) {
+    const moodleUrlPattern = 'https://lms.ritsumei.ac.jp/';
 
-  if (!isFromMoodle) {
-    // Moodle 以外 → デフォルトのファイル名をそのまま使用
-    suggest({ filename: downloadItem.filename });
-    return;
-  }
+    // referrer または URL で Moodle からのダウンロードか判定
+    const isFromMoodle =
+        (downloadItem.referrer && downloadItem.referrer.startsWith(moodleUrlPattern)) ||
+        (downloadItem.url && downloadItem.url.startsWith(moodleUrlPattern));
 
-  // コースIDの特定を試みる（複数の方法を順番に試行）
-  (async () => {
-    try {
-      let courseId = null;
-
-      // 1. referrer URLからコースIDを直接抽出
-      courseId = extractCourseIdFromUrl(downloadItem.referrer);
-
-      // 2. referrer のタブからbodyクラス経由でコースIDを取得
-      if (!courseId) {
-        courseId = await getCourseIdFromTab(downloadItem.referrer);
-      }
-
-      // 3. ダウンロードURLからコースIDを抽出（あまり期待できないが試行）
-      if (!courseId) {
-        courseId = extractCourseIdFromUrl(downloadItem.url);
-      }
-
-      // コースIDからコース名を解決
-      const courseName = await resolveCourseName(courseId);
-
-      // ファイル名として不適切な文字を置換する
-      const sanitizedCourseName = courseName.replace(
-        /[\\/:*?"<>|]/g,
-        "－"
-      );
-
-      const originalFilename = downloadItem.filename;
-
-      // 新しいファイルパスを構築する (Moodle/[授業名]/[元のファイル名])
-      const newFilename = `Moodle/${sanitizedCourseName}/${originalFilename}`;
-
-      console.log("Moodle Enhancer: Suggesting new filename:", newFilename);
-
-      suggest({
-        filename: newFilename,
-        conflictAction: "uniquify",
-      });
-    } catch (error) {
-      console.error("Moodle Enhancer: Error in filename suggestion:", error);
-      // エラー時はデフォルトのファイル名を使用
-      suggest({ filename: downloadItem.filename });
+    if (!isFromMoodle) {
+        suggest({ filename: downloadItem.filename });
+        return;
     }
-  })();
 
-  return true; // 非同期処理のため true を返す
+    // 非同期でコースIDを特定し、フォルダ分けを決定
+    (async () => {
+        try {
+            let courseId = null;
+
+            // 1. referrer URL からコースIDを直接抽出
+            courseId = extractCourseIdFromUrl(downloadItem.referrer);
+
+            // 2. referrer のタブから body クラス経由でコースIDを取得
+            if (!courseId) {
+                courseId = await getCourseIdFromTab(downloadItem.referrer);
+            }
+
+            // 3. ダウンロード URL からコースIDを抽出（あまり期待できないが試行）
+            if (!courseId) {
+                courseId = extractCourseIdFromUrl(downloadItem.url);
+            }
+
+            // コースIDからコース名を解決
+            const courseName = await resolveCourseName(courseId);
+
+            // ファイル名として安全な形式にサニタイズ
+            const sanitizedCourseName = sanitizeForFilename(courseName);
+
+            const originalFilename = downloadItem.filename;
+
+            // 新しいファイルパスを構築 (Moodle/[授業名]/[元のファイル名])
+            const newFilename = `Moodle/${sanitizedCourseName}/${originalFilename}`;
+
+            bgLog('ファイル名提案:', newFilename);
+
+            suggest({
+                filename: newFilename,
+                conflictAction: 'uniquify'
+            });
+        } catch (error) {
+            bgWarn('ファイル名提案エラー:', error.message);
+            // エラー時はデフォルトのファイル名を使用
+            suggest({ filename: downloadItem.filename });
+        }
+    })();
+
+    return true; // 非同期処理のため true を返す
 });
