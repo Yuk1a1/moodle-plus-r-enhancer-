@@ -112,24 +112,24 @@
             const courseId = getCourseIdFromBody();
             if (!courseId) throw new Error("コースIDが見つかりません。");
 
-            // キャッシュがなければAPIを叩く
+            // キャッシュがなければDOM(コースインデックス)からスクレイピング
             if (!apiCache) {
-                apiCache = await callMoodleApi('core_course_get_contents', { courseid: courseId });
+                apiCache = scrapeCourseIndex();
             }
 
-            const sectionData = matchSectionToApi(sectionElement, apiCache);
+            const sectionData = matchSectionToScrapedData(sectionElement, apiCache);
 
             if (!sectionData) {
-                throw new Error("APIレスポンスとセクションの紐付けに失敗しました。");
+                throw new Error("セクションの紐付けに失敗しました。このセクションは目次に存在しない可能性があります。");
             }
 
             // モジュールが存在しない（空の）セクションの場合
             if (!sectionData.modules || sectionData.modules.length === 0) {
-                // ユーザーの指示により「何もないなら何も表示しない」ため、展開をキャンセルしてトグルボタン自体を消す
+                // 展開キャンセル
                 contentContainer.classList.remove('me-expanded');
                 const toggleBtn = sectionElement.querySelector('.me-section-toggle');
                 if (toggleBtn) {
-                    toggleBtn.style.display = 'none'; // 何もないので無効化
+                    toggleBtn.style.display = 'none'; // 無効化
                 }
                 return;
             }
@@ -141,6 +141,67 @@
             console.error("[Moodle Enhancer] F1 展開エラー:", e);
             contentContainer.innerHTML = `<div class="me-status-box me-error-box">⚠️ データの取得に失敗しました。(${e.message})</div>`;
         }
+    }
+
+    /**
+     * 左側のコースインデックスドロワーからデータをスクレイピングする
+     */
+    function scrapeCourseIndex() {
+        const drawerContent = document.getElementById('courseindex-content');
+        if (!drawerContent) {
+            throw new Error("コース目次要素(courseindex-content)が見つかりません。テーマが異なるか、まだ読み込まれていません。");
+        }
+
+        const sections = Array.from(drawerContent.querySelectorAll('.courseindex-section'));
+        const result = [];
+
+        sections.forEach(sec => {
+            // 例: courseindexsection10
+            const sectionIdNode = sec.id;
+            let sectionId = null;
+            if (sectionIdNode) {
+                const match = sectionIdNode.match(/courseindexsection(\d+)/);
+                if (match) sectionId = match[1];
+            }
+
+            const titleNode = sec.querySelector('.courseindex-section-title');
+            const title = titleNode ? titleNode.textContent.trim() : '無題のセクション';
+
+            // そのセクションに含まれる全モジュール
+            const items = Array.from(sec.querySelectorAll('.courseindex-item')).map(item => {
+                const nameNode = item.querySelector('.courseindex-name') || item;
+                const name = nameNode.textContent.trim();
+
+                let url = item.href;
+                if (!url) {
+                    const aTag = item.querySelector('a');
+                    if (aTag) url = aTag.href;
+                }
+
+                // アイコンのURLを取得
+                let iconUrl = '';
+                const iconImg = item.querySelector('img.icon');
+                if (iconImg) iconUrl = iconImg.src;
+
+                // モジュール種別を大まかに推測（URLやアイコンから）
+                const isPdf = iconUrl.includes('pdf') || iconUrl.includes('document') || (url && url.toLowerCase().includes('resource/view.php') && name.toLowerCase().includes('.pdf'));
+
+                return {
+                    name: name,
+                    url: url,
+                    modicon: iconUrl,
+                    isPdf: isPdf
+                };
+            });
+
+            result.push({
+                id: sectionId,
+                title: title,
+                modules: items
+            });
+        });
+
+        return result;
     }
 
     /**
@@ -186,33 +247,24 @@
     }
 
     /**
-     * セクション要素からAPIのセクションデータを見つけ出す（紐付け）
+     * セクション要素からスクレイピングしたデータを紐付ける
      */
-    function matchSectionToApi(sectionElement, apiSections) {
-        // 方法1: sectionxxx の IDから推測
-        const elemId = sectionElement.id; // 例: "section-3"
+    function matchSectionToScrapedData(sectionElement, scrapedSections) {
+        // sectionElement (例: <li id="section-1" class="section course-section">)
+        const elemId = sectionElement.id;
         let sectionNum = elemId ? elemId.replace('section-', '') : null;
 
-        // section.php へのリンクがあればそこから id を取る
-        const link = sectionElement.querySelector('a[href*="section.php?id="]');
-        if (link) {
-            const url = new URL(link.href);
-            const sectionId = url.searchParams.get('id');
-            // Moodle API はセクションの実ID(データベースのidキー)を id プロパティに格納している
-            const match = apiSections.find(s => String(s.id) === sectionId);
-            if (match) return match;
-        }
-        
-        // Moodle4.0系以降は data-sectionid がある場合もある
-        if (sectionElement.dataset.sectionid) {
-            const match = apiSections.find(s => String(s.id) === sectionElement.dataset.sectionid);
+        if (sectionNum !== null) {
+            // スクラップしたデータもidにセクション番号（courseindexsectionX -> X）を持っている
+            const match = scrapedSections.find(s => String(s.id) === sectionNum);
             if (match) return match;
         }
 
-        // フォールバック: リストの何番目かで当てる (nameのマッチングも可能)
-        if (sectionNum !== null) {
-            // Moodleのセクション配列は 0 が「アナウンスメント等」、1 が「第1週」となる事が多い
-            const match = apiSections.find(s => String(s.section) === sectionNum);
+        // フォールバック: タイトル名による緩い一致
+        const titleNode = sectionElement.querySelector('.course-section-header h3.sectionname');
+        if (titleNode) {
+            const titleText = titleNode.textContent.replace('▼ 展開', '').replace('▲ 閉じる', '').replace('⌛...', '').trim();
+            const match = scrapedSections.find(s => s.title.includes(titleText) || titleText.includes(s.title));
             if (match) return match;
         }
 
@@ -228,17 +280,19 @@
 
         modules.forEach(mod => {
             // Label（単なるテキスト領域）は今回は除外（ファイルや課題のみが主なターゲット）
-            if (mod.modname === 'label') return;
+            if (!mod.url) return;
 
             const li = document.createElement('li');
             li.className = 'me-module-item';
 
             // アイコン
-            const iconImg = document.createElement('img');
-            iconImg.className = 'me-module-icon';
-            iconImg.src = mod.modicon;
-            iconImg.alt = mod.modname;
-            li.appendChild(iconImg);
+            if (mod.modicon) {
+                const iconImg = document.createElement('img');
+                iconImg.className = 'me-module-icon';
+                iconImg.src = mod.modicon;
+                iconImg.alt = '';
+                li.appendChild(iconImg);
+            }
 
             // インフォ領域（タイトル等）
             const infoDiv = document.createElement('div');
@@ -250,23 +304,17 @@
             nameLink.textContent = mod.name;
             infoDiv.appendChild(nameLink);
 
-            // 提出期限などの情報があれば付与可能だが、core_course_get_contents には dates 配列が含まれることがある
-            if (mod.dates && mod.dates.length > 0) {
-                const datesDiv = document.createElement('div');
-                datesDiv.className = 'me-module-dates';
-                datesDiv.textContent = mod.dates.map(d => d.label + ' ' + (new Date(d.timestamp * 1000).toLocaleString('ja-JP'))).join(' / ');
-                infoDiv.appendChild(datesDiv);
-            }
-
             li.appendChild(infoDiv);
 
-            // ダウンロードリンク (PDFなどファイルがある場合)
-            if (typeof getModuleFileUrl === 'function') {
-                const fileUrl = getModuleFileUrl(mod);
-                if (fileUrl) {
+            // ダウンロードリンク (PDFの場合)
+            if (mod.isPdf && mod.url) {
+                try {
+                    let dlUrl = new URL(mod.url);
+                    dlUrl.searchParams.set('forcedownload', '1');
+                    
                     const dlBtn = document.createElement('a');
                     dlBtn.className = 'me-dl-btn';
-                    dlBtn.href = fileUrl;
+                    dlBtn.href = dlUrl.toString();
                     dlBtn.target = '_blank';
                     dlBtn.innerHTML = '📥 DL';
                     dlBtn.title = 'ファイルをダウンロードします';
@@ -277,7 +325,7 @@
                     });
 
                     li.appendChild(dlBtn);
-                }
+                } catch(e) {}
             }
 
             ul.appendChild(li);
