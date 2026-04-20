@@ -102,32 +102,36 @@
         events.forEach(ev => {
             // 締切時刻 (ミリ秒)
             const dueTimeMs = ev.timesort * 1000;
-            const diffMs = dueTimeMs - now;
             
             // 残り時間の計算
-            const diffHours = diffMs / (1000 * 60 * 60);
-            const diffDays = diffHours / 24;
+            const diffMs = Math.max(0, dueTimeMs - now);
+            const totalMinutes = Math.floor(diffMs / (1000 * 60));
+            const days = Math.floor(totalMinutes / (60 * 24));
+            const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+            const minutes = totalMinutes % 60;
+
+            let timeLeftText = '';
+            if (diffMs === 0) {
+                timeLeftText = '期限切れ';
+            } else if (days > 0) {
+                timeLeftText = `残り ${days}日 ${hours}時間 ${minutes}分`;
+            } else if (hours > 0) {
+                timeLeftText = `残り ${hours}時間 ${minutes}分`;
+            } else {
+                timeLeftText = `残り ${minutes}分`;
+            }
 
             // 危険度判定
             let statusClass = 'me-safe';
-            let timeLeftText = '';
-
-            if (diffHours <= 48) {
-                // 2日 (48時間) 以内は「超危険」
+            if (days < 2) {
+                // 48時間(約2日)未満は「超危険」
                 statusClass = 'me-urgent';
-                if (diffHours < 24) {
-                    timeLeftText = `残り ${Math.max(1, Math.floor(diffHours))} 時間`;
-                } else {
-                    timeLeftText = `残り 1 日`;
-                }
-            } else if (diffDays <= 7) {
+            } else if (days <= 7) {
                 // 1週間以内は「要注意」
                 statusClass = 'me-warning';
-                timeLeftText = `残り ${Math.floor(diffDays)} 日`;
             } else {
                 // それ以上は「安全」
                 statusClass = 'me-safe';
-                timeLeftText = `残り ${Math.floor(diffDays)} 日`;
             }
 
             // タイトルのクリーニング (Moodle特有の接頭辞を消すなど)
