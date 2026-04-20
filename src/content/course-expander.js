@@ -27,6 +27,12 @@
         // 各セクションヘッダーにトグルボタンを挿入
         const sections = document.querySelectorAll('li.section.course-section');
         sections.forEach(injectSectionToggle);
+
+        // 常に自動で「すべて展開」を実行する（ゼロクリックUX）
+        const expandBtn = document.querySelector('.me-btn-expand-all');
+        if (expandBtn) {
+            expandBtn.click();
+        }
     }
 
     /**
@@ -169,8 +175,20 @@
 
             // そのセクションに含まれる全モジュール
             const items = Array.from(sec.querySelectorAll('.courseindex-item')).map(item => {
-                const nameNode = item.querySelector('.courseindex-name') || item;
-                const name = nameNode.textContent.trim();
+                const nameNode = item.querySelector('.courseindex-name') || item.querySelector('.courseindex-link') || item;
+                
+                // Moodleがスクリーンリーダー用に入れる視覚外テキストやバッジを取り除く
+                const clone = nameNode.cloneNode(true);
+                clone.querySelectorAll('.sr-only, .badge, .courseindex-chevron').forEach(el => el.remove());
+                
+                // それでも残るテキストノイズを無理やりリプレイス
+                let name = clone.textContent.replace(/展開する/g, '')
+                                            .replace(/折りたたむ/g, '')
+                                            .replace(/ハイライト/g, '')
+                                            .replace(/活動:\s*\d+/g, '')
+                                            .replace(/進捗:\s*\d+\s*\/\s*\d+/g, '')
+                                            .replace(/[「」]/g, '') // 「テスト」のようなスクリーンリーダーの括弧を除去
+                                            .trim();
 
                 let url = item.href;
                 if (!url) {
