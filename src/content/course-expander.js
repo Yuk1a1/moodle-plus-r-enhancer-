@@ -1,0 +1,341 @@
+/**
+ * course-expander.js — コースコンテンツのインラインエクスパンダー
+ * 
+ * ページ移動せずにMoodle APIを叩いて全セクションのモジュールを取得し、
+ * インラインで展開/折りたたみを行う機能。
+ */
+
+(function () {
+    // コーストップページ (/course/view.php) 以外は実行しない
+    if (!location.pathname.startsWith('/course/view.php')) return;
+
+    let apiCache = null;
+
+    /**
+     * DOM読み込み完了時に初期化
+     */
+    function init() {
+        const courseContent = document.querySelector('.course-content') || document.querySelector('ul.topics');
+        if (!courseContent) return;
+
+        // すでに注入済みの場合はスキップ（二重実行防止）
+        if (document.querySelector('.me-global-controls')) return;
+
+        // グローバルコントローラーを上部に挿入
+        injectGlobalControls(courseContent);
+
+        // 各セクションヘッダーにトグルボタンを挿入
+        const sections = document.querySelectorAll('li.section.course-section');
+        sections.forEach(injectSectionToggle);
+    }
+
+    /**
+     * コースページの最上部に「すべて展開」「すべて折りたたむ」ボタンを配置
+     */
+    function injectGlobalControls(container) {
+        const controls = document.createElement('div');
+        controls.className = 'me-global-controls';
+        controls.innerHTML = `
+            <button class="me-btn me-btn-expand-all" title="全セクションに入っている資料を展開します">
+                📂 すべて展開
+            </button>
+            <button class="me-btn me-btn-collapse-all" title="展開された資料をすべて閉じます" style="display:none;">
+                📁 すべて折りたたむ
+            </button>
+        `;
+
+        const expandBtn = controls.querySelector('.me-btn-expand-all');
+        const collapseBtn = controls.querySelector('.me-btn-collapse-all');
+
+        expandBtn.addEventListener('click', async () => {
+            expandBtn.innerHTML = '<span class="me-spinner"></span>展開中...';
+            await expandAllSections();
+            expandBtn.innerHTML = '📂 すべて展開';
+            expandBtn.style.display = 'none';
+            collapseBtn.style.display = 'inline-flex';
+        });
+
+        collapseBtn.addEventListener('click', () => {
+            collapseAllSections();
+            collapseBtn.style.display = 'none';
+            expandBtn.style.display = 'inline-flex';
+        });
+
+        container.prepend(controls);
+    }
+
+    /**
+     * 各セクションのヘッダーに個別展開ボタンを配置
+     */
+    function injectSectionToggle(sectionElement) {
+        const headerTitle = sectionElement.querySelector('.course-section-header h3.sectionname');
+        if (!headerTitle) return; // タイトルがなければ無視
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'me-section-toggle';
+        toggleBtn.textContent = '▼ 展開';
+        toggleBtn.title = 'この週の資料を展開します';
+
+        toggleBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const contentContainer = getOrCreateContentContainer(sectionElement);
+            
+            // すでに展開中の場合は閉じる
+            if (contentContainer.classList.contains('me-expanded')) {
+                collapseSection(sectionElement, toggleBtn, contentContainer);
+            } else {
+                toggleBtn.textContent = '⌛...';
+                await expandSection(sectionElement, contentContainer);
+                toggleBtn.textContent = '▲ 閉じる';
+            }
+        });
+
+        headerTitle.appendChild(toggleBtn);
+    }
+
+    /**
+     * セクションを展開（APIからデータ取得＆レンダリング）
+     */
+    async function expandSection(sectionElement, contentContainer) {
+        // すでにデータがレンダリング済みの場合は開くだけ
+        if (contentContainer.dataset.rendered === "true") {
+            contentContainer.classList.add('me-expanded');
+            return;
+        }
+
+        try {
+            contentContainer.innerHTML = '<div class="me-status-box"><div class="me-spinner"></div>データを取得しています...</div>';
+            contentContainer.classList.add('me-expanded'); // アニメーション開始
+
+            const courseId = getCourseIdFromBody();
+            if (!courseId) throw new Error("コースIDが見つかりません。");
+
+            // キャッシュがなければAPIを叩く
+            if (!apiCache) {
+                apiCache = await callMoodleApi('core_course_get_contents', { courseid: courseId });
+            }
+
+            const sectionData = matchSectionToApi(sectionElement, apiCache);
+
+            if (!sectionData) {
+                throw new Error("APIレスポンスとセクションの紐付けに失敗しました。");
+            }
+
+            // モジュールが存在しない（空の）セクションの場合
+            if (!sectionData.modules || sectionData.modules.length === 0) {
+                // ユーザーの指示により「何もないなら何も表示しない」ため、展開をキャンセルしてトグルボタン自体を消す
+                contentContainer.classList.remove('me-expanded');
+                const toggleBtn = sectionElement.querySelector('.me-section-toggle');
+                if (toggleBtn) {
+                    toggleBtn.style.display = 'none'; // 何もないので無効化
+                }
+                return;
+            }
+
+            renderModules(sectionData.modules, contentContainer);
+            contentContainer.dataset.rendered = "true";
+
+        } catch (e) {
+            console.error("[Moodle Enhancer] F1 展開エラー:", e);
+            contentContainer.innerHTML = \`<div class="me-status-box me-error-box">⚠️ データの取得に失敗しました。(\${e.message})</div>\`;
+        }
+    }
+
+    /**
+     * セクションを閉じる
+     */
+    function collapseSection(sectionElement, toggleBtn, contentContainer) {
+        contentContainer.classList.remove('me-expanded');
+        toggleBtn.textContent = '▼ 展開';
+    }
+
+    /**
+     * 全セクションを一括展開
+     */
+    async function expandAllSections() {
+        const sections = document.querySelectorAll('li.section.course-section');
+        const tasks = Array.from(sections).map(section => {
+            const toggleBtn = section.querySelector('.me-section-toggle');
+            if (!toggleBtn || toggleBtn.style.display === 'none') return null;
+            
+            const contentContainer = getOrCreateContentContainer(section);
+            if (!contentContainer.classList.contains('me-expanded')) {
+                toggleBtn.textContent = '▲ 閉じる';
+                return expandSection(section, contentContainer);
+            }
+            return null;
+        }).filter(t => t !== null);
+
+        await Promise.allSettled(tasks);
+    }
+
+    /**
+     * 全セクションを一括で折りたたむ
+     */
+    function collapseAllSections() {
+        const sections = document.querySelectorAll('li.section.course-section');
+        sections.forEach(section => {
+            const toggleBtn = section.querySelector('.me-section-toggle');
+            const contentContainer = section.querySelector('.me-section-content');
+            if (toggleBtn && contentContainer && contentContainer.classList.contains('me-expanded')) {
+                collapseSection(section, toggleBtn, contentContainer);
+            }
+        });
+    }
+
+    /**
+     * セクション要素からAPIのセクションデータを見つけ出す（紐付け）
+     */
+    function matchSectionToApi(sectionElement, apiSections) {
+        // 方法1: sectionxxx の IDから推測
+        const elemId = sectionElement.id; // 例: "section-3"
+        let sectionNum = elemId ? elemId.replace('section-', '') : null;
+
+        // section.php へのリンクがあればそこから id を取る
+        const link = sectionElement.querySelector('a[href*="section.php?id="]');
+        if (link) {
+            const url = new URL(link.href);
+            const sectionId = url.searchParams.get('id');
+            // Moodle API はセクションの実ID(データベースのidキー)を id プロパティに格納している
+            const match = apiSections.find(s => String(s.id) === sectionId);
+            if (match) return match;
+        }
+        
+        // Moodle4.0系以降は data-sectionid がある場合もある
+        if (sectionElement.dataset.sectionid) {
+            const match = apiSections.find(s => String(s.id) === sectionElement.dataset.sectionid);
+            if (match) return match;
+        }
+
+        // フォールバック: リストの何番目かで当てる (nameのマッチングも可能)
+        if (sectionNum !== null) {
+            // Moodleのセクション配列は 0 が「アナウンスメント等」、1 が「第1週」となる事が多い
+            const match = apiSections.find(s => String(s.section) === sectionNum);
+            if (match) return match;
+        }
+
+        return null;
+    }
+
+    /**
+     * モジュールのリストをHTMLにレンダリングする
+     */
+    function renderModules(modules, container) {
+        const ul = document.createElement('ul');
+        ul.className = 'me-module-list';
+
+        modules.forEach(mod => {
+            // Label（単なるテキスト領域）は今回は除外（ファイルや課題のみが主なターゲット）
+            if (mod.modname === 'label') return;
+
+            const li = document.createElement('li');
+            li.className = 'me-module-item';
+
+            // アイコン
+            const iconImg = document.createElement('img');
+            iconImg.className = 'me-module-icon';
+            iconImg.src = mod.modicon;
+            iconImg.alt = mod.modname;
+            li.appendChild(iconImg);
+
+            // インフォ領域（タイトル等）
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'me-module-info';
+
+            const nameLink = document.createElement('a');
+            nameLink.className = 'me-module-name';
+            nameLink.href = mod.url || '#';
+            nameLink.textContent = mod.name;
+            infoDiv.appendChild(nameLink);
+
+            // 提出期限などの情報があれば付与可能だが、core_course_get_contents には dates 配列が含まれることがある
+            if (mod.dates && mod.dates.length > 0) {
+                const datesDiv = document.createElement('div');
+                datesDiv.className = 'me-module-dates';
+                datesDiv.textContent = mod.dates.map(d => d.label + ' ' + (new Date(d.timestamp * 1000).toLocaleString('ja-JP'))).join(' / ');
+                infoDiv.appendChild(datesDiv);
+            }
+
+            li.appendChild(infoDiv);
+
+            // ダウンロードリンク (PDFなどファイルがある場合)
+            if (typeof getModuleFileUrl === 'function') {
+                const fileUrl = getModuleFileUrl(mod);
+                if (fileUrl) {
+                    const dlBtn = document.createElement('a');
+                    dlBtn.className = 'me-dl-btn';
+                    dlBtn.href = fileUrl;
+                    dlBtn.target = '_blank';
+                    dlBtn.innerHTML = '📥 DL';
+                    dlBtn.title = 'ファイルをダウンロードします';
+                    
+                    // クリック時に元のリンクへの遷移を防ぐ
+                    dlBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                    });
+
+                    li.appendChild(dlBtn);
+                }
+            }
+
+            ul.appendChild(li);
+        });
+        
+        container.innerHTML = '';
+        
+        if (ul.childNodes.length === 0) {
+            // Labelばかりで実質空だった場合
+            container.classList.remove('me-expanded');
+            container.style.display = 'none'; // 親の処理などで対応済なら不要だが念のため
+            return;
+        }
+
+        container.appendChild(ul);
+    }
+
+    /**
+     * セクションに紐付く展開コンテンツ用のコンテナを取得または作成する
+     */
+    function getOrCreateContentContainer(sectionElement) {
+        let container = sectionElement.querySelector('.me-section-content');
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'me-section-content';
+            
+            // 通常、.content クラス配下に挿入するのが綺麗
+            const target = sectionElement.querySelector('.content') || sectionElement;
+            target.appendChild(container);
+        }
+        return container;
+    }
+
+    // body クラスからのコースID抽出 (content.js と同等)
+    function getCourseIdFromBody() {
+        const bodyClass = document.body.className;
+        const match = bodyClass.match(/course-(\d+)/);
+        if (match && match[1]) {
+            return match[1];
+        }
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('id');
+    }
+
+    // Moodleのページロード処理に割り込む
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+
+    // DOMの動的変化に対応するため、MutationObserverで遅延読み込みにも備える
+    const observer = new MutationObserver(() => {
+        const courseContent = document.querySelector('.course-content') || document.querySelector('ul.topics');
+        if (courseContent && !document.querySelector('.me-global-controls')) {
+            init();
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+})();

@@ -1,0 +1,201 @@
+/* ===========================================================
+   コースコンテンツ全展開 (Inline Expander) — Moodle Enhancer
+   =========================================================== */
+
+/* --- 1. グローバルコントロール領域（すべて展開・折りたたむ） --- */
+.me-global-controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: var(--bs-light, #f8f9fa);
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 8px;
+    align-items: center;
+}
+
+/* 拡張機能独自のボタン基本スタイル (Moodle準拠) */
+.me-global-controls .me-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--bs-secondary, #6c757d);
+    background: #fff;
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.me-global-controls .me-btn:hover {
+    color: var(--bs-primary, #0d6efd);
+    border-color: var(--bs-primary, #0d6efd);
+    background: rgba(13, 110, 253, 0.04);
+}
+
+.me-global-controls .me-btn-expand-all {
+    color: var(--bs-primary, #0d6efd);
+    border-color: var(--bs-primary, #0d6efd);
+}
+
+/* --- 2. セクションごとのトグルボタン --- */
+.me-section-toggle {
+    margin-left: 12px;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    color: var(--bs-secondary, #6c757d);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    vertical-align: middle;
+}
+
+.me-section-toggle:hover {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: var(--bs-border-color, #dee2e6);
+}
+
+/* --- 3. 展開アニメーション領域 --- */
+.me-section-content {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+    margin-top: 10px;
+    border-left: 3px solid var(--bs-primary, #0d6efd);
+    padding-left: 15px;
+    margin-left: 5px;
+}
+
+.me-section-content.me-expanded {
+    max-height: 5000px; /* 十分に大きい値（アニメーション用） */
+    opacity: 1;
+    margin-bottom: 20px;
+}
+
+/* --- 4. モジュールリスト (資料一覧) --- */
+.me-module-list {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 0 0;
+}
+
+.me-module-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+    font-size: 0.95rem;
+    color: var(--bs-body-color, #212529);
+    transition: background 0.2s ease;
+}
+
+.me-module-item:hover {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.me-module-item:last-child {
+    border-bottom: none;
+}
+
+.me-module-icon {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    object-fit: contain;
+}
+
+.me-module-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.me-module-name {
+    color: var(--bs-primary, #0d6efd);
+    text-decoration: none;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.me-module-name:hover {
+    text-decoration: underline;
+}
+
+.me-module-dates {
+    font-size: 0.75rem;
+    color: var(--bs-secondary, #6c757d);
+    margin-top: 2px;
+}
+
+/* ダウンロードボタン */
+.me-dl-btn {
+    flex-shrink: 0;
+    padding: 6px 14px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #fff;
+    background: var(--bs-primary, #0d6efd);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.2s ease, transform 0.1s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 2px 4px rgba(13, 110, 253, 0.2);
+}
+
+.me-dl-btn:hover {
+    background: #0b5ed7; /* btn-primary-hover */
+    color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(13, 110, 253, 0.3);
+}
+
+.me-dl-btn:active {
+    transform: translateY(0);
+}
+
+/* --- 5. ステータスUI（ローディング/エラー/空） --- */
+.me-status-box {
+    padding: 16px;
+    text-align: center;
+    color: var(--bs-secondary, #6c757d);
+    font-size: 0.9rem;
+    background: var(--bs-light, #f8f9fa);
+    border-radius: 6px;
+    margin-top: 10px;
+}
+
+.me-spinner {
+    width: 20px;
+    height: 20px;
+    border: 3px solid var(--bs-border-color, #dee2e6);
+    border-top-color: var(--bs-primary, #0d6efd);
+    border-radius: 50%;
+    animation: me-spin 0.8s linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
+@keyframes me-spin {
+    to { transform: rotate(360deg); }
+}
+
+.me-error-box {
+    color: var(--bs-danger, #dc3545);
+    background: rgba(220, 53, 69, 0.05);
+    border: 1px solid rgba(220, 53, 69, 0.2);
+}

@@ -1,0 +1,36 @@
+- generic [ref=e5]:
+  - img "組織の背景画像" [ref=e6]
+  - generic [ref=e8]:
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - img "組織のバナー ロゴ" [ref=e17]
+        - main [ref=e18]:
+          - generic [ref=e21]:
+            - heading "サインイン" [level=1] [ref=e25]
+            - generic [ref=e26]:
+              - alert
+              - generic [ref=e28]:
+                - textbox "Please enter your Ritsumeikan/APU email address." [active] [ref=e29]
+                - textbox [ref=e30]
+            - button "次へ" [ref=e36] [cursor=pointer]
+            - generic [ref=e37]:
+              - paragraph [ref=e38]:
+                - strong [ref=e39]: サインインできない場合の問合せ先
+              - paragraph [ref=e40]:
+                - link "立命館大学" [ref=e41] [cursor=pointer]:
+                  - /url: https://it.support.ritsumei.ac.jp/hc/articles/33679159333145
+              - paragraph [ref=e42]:
+                - link "立命館アジア太平洋大学" [ref=e43] [cursor=pointer]:
+                  - /url: https://forms.office.com/r/ybzg28XUxb
+              - paragraph [ref=e44]:
+                - link "附属校" [ref=e45] [cursor=pointer]:
+                  - /url: https://it.support.ritsumei.ac.jp/hc/articles/900005171043
+      - button "サインイン オプション undefined" [ref=e51] [cursor=pointer]:
+        - generic [ref=e55]: サインイン オプション
+    - contentinfo [ref=e56]:
+      - generic [ref=e57]:
+        - link "利用規約" [ref=e58] [cursor=pointer]:
+          - /url: https://www.microsoft.com/ja/servicesagreement/
+        - link "プライバシーと Cookie" [ref=e59] [cursor=pointer]:
+          - /url: https://privacy.microsoft.com/ja/privacystatement
+        - button "トラブルシューティング情報についてはここをクリックしてください" [ref=e60] [cursor=pointer]: ...

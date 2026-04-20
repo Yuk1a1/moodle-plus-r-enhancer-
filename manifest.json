@@ -20,7 +20,11 @@
       ],
       "js": [
         "src/lib/moodle-api.js",
-        "src/content/content.js"
+        "src/content/content.js",
+        "src/content/course-expander.js"
+      ],
+      "css": [
+        "src/content/course-expander.css"
       ],
       "run_at": "document_idle"
     },
