@@ -41,7 +41,7 @@
 |-----------|------|-----------|
 | v1.1.0 | F2 + options ページ最小版 | force-download.js, options.html |
 | v1.2.0 | F3 | timetable-compact.css/js |
-| v1.3.0 | F1 (F2 のロジックを統合) | course-expander.js/css |
+| v1.3.0 | F1 (F2 のロジックを連携・DOMスクレイピング構成) | course-expander.js/css |
 
 ---
 
@@ -439,7 +439,10 @@ chrome.downloads.onDeterminingFilename.addListener((downloadItem, suggest) => {
 
 ---
 
-## 5. F1: コースコンテンツの全展開
+## 5. F1: コースコンテンツの全展開 (実装完了)
+
+> **[実装状況] 完了（v1.3.0）**
+> ※注：立命館大学Moodle環境において `core_course_get_contents` API が利用不可 (`servicenotavailable`) であることが判明したため、左側の「コースインデックス」ドロワーからDOMをスクレイピングしてインライン展開するアプローチへ設計を変更・実装した。
 
 ### 5.1. ユーザーの不満
 
