@@ -199,28 +199,59 @@ async function fetchCourseName(courseId) {
         return cleaned;
     }
 
+    // フォールバック1: 裏で view.php にアクセスし、HTMLの h1 要素から本物のコース名(フルネーム)を取得する
+    // (Moodle API がブロックされていても、通常のHTMLアクセスなら取得可能なため)
+    try {
+        const res = await fetch(`/course/view.php?id=${courseId}`);
+        if (res.ok) {
+            const html = await res.text();
+            // 正規表現で h1 を抽出 (DOMParserは重い・Content Scriptで使えない場合があるため正規表現を採用)
+            const h1Match = html.match(/<h1[^>]*class="[^"]*page-header-headings[^"]*"[^>]*>([\s\S]*?)<\/h1>/i) 
+                         || html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+            
+            if (h1Match) {
+                // HTMLタグを除去してテキストを取り出す
+                const rawH1 = h1Match[1].replace(/<[^>]*>/g, '').trim();
+                const cleaned = cleanCourseName(rawH1);
+                if (cleaned) {
+                    log('バックグラウンドHTMLフェッチからコース名取得:', cleaned);
+                    return cleaned;
+                }
+            }
+        }
+    } catch (e) {
+        log('バックグラウンドHTMLフェッチ失敗:', e);
+    }
+
+    //---------------------------------------------------------
+    // ここから下は現在の画面DOMからどうにか絞り出す最終手段
+    // （タイトルやパンくずには正式名称ではなく「2026-52322」のような
+    // 授業コードしか載っていないケースが多いため、最終手段とする）
+    //---------------------------------------------------------
     let courseNameStr = null;
 
-    // フォールバック1: パンくずリストや左ドロワー内のコースリンクテキストを使う
-    const navLink = document.querySelector(`a[href*="/course/view.php?id=${courseId}"]`);
-    if (navLink) {
-        courseNameStr = navLink.textContent.trim();
-        log('DOMのリンクからコース名取得:', courseNameStr);
-    } 
-    // フォールバック2: <title> タグから抽出 (例: "コース: 経営情報論 (BA), セクション: Week2")
-    else if (document.title.includes('コース:')) {
-        const titleMatch = document.title.match(/コース:\s*([^,]+)/);
-        if (titleMatch) {
-            courseNameStr = titleMatch[1].trim();
-            log('タイトルからコース名取得:', courseNameStr);
-        }
-    }
-    // フォールバック3: view.php なら h1 を信用する（旧仕様に戻す）
-    else if (window.location.pathname.startsWith('/course/view.php')) {
+    // フォールバック2: view.php なら表示されている h1 を信用する
+    if (window.location.pathname.startsWith('/course/view.php')) {
         const h1 = document.querySelector('.page-header-headings h1');
         if (h1) {
             courseNameStr = h1.textContent.trim();
             log('h1からコース名取得:', courseNameStr);
+        }
+    }
+    // フォールバック3: パンくずリストや左ドロワー内のコースリンクテキストを使う
+    else {
+        const navLink = document.querySelector(`a[href*="/course/view.php?id=${courseId}"]`);
+        if (navLink) {
+            courseNameStr = navLink.textContent.trim();
+            log('DOMのリンクからコース名取得:', courseNameStr);
+        } 
+        // フォールバック4: <title> タグから抽出 (例: "コース: 2026-31465")
+        else if (document.title.includes('コース:')) {
+            const titleMatch = document.title.match(/コース:\s*([^,]+)/);
+            if (titleMatch) {
+                courseNameStr = titleMatch[1].trim();
+                log('タイトルからコース名取得:', courseNameStr);
+            }
         }
     }
 
