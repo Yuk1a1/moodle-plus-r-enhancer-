@@ -27,7 +27,8 @@
     {
       "matches": [
         "https://lms.ritsumei.ac.jp/mod/resource/view.php*",
-        "https://lms.ritsumei.ac.jp/mod/folder/view.php*"
+        "https://lms.ritsumei.ac.jp/mod/folder/view.php*",
+        "https://lms.ritsumei.ac.jp/pluginfile.php/*"
       ],
       "js": ["src/content/force-download.js"],
       "css": ["src/content/force-download.css"],

@@ -1,4 +1,8 @@
-// force-download.js — /mod/resource/view.php および /mod/folder/view.php 専用
+// force-download.js — PDF自動ダウンロード
+// 対象:
+//   - /mod/resource/view.php (リソースページ)
+//   - /mod/folder/view.php  (フォルダページ)
+//   - /pluginfile.php/...   (Moodleの「自動」表示設定でリダイレクトされた場合)
 // run_at: "document_end"
 
 (async function() {
@@ -19,19 +23,21 @@
     }
 
     // =================================================================
-    // 1. ページ種別に応じた URL 検出
+    // 1. ページ種別を判定してルーティング
     // =================================================================
-    const isResourcePage = location.pathname.startsWith('/mod/resource/view.php');
-    const isFolderPage = location.pathname.startsWith('/mod/folder/view.php');
+    const pathname = location.pathname;
+    const isResourcePage = pathname.startsWith('/mod/resource/view.php');
+    const isFolderPage   = pathname.startsWith('/mod/folder/view.php');
+    const isPluginFile    = pathname.startsWith('/pluginfile.php/');
 
-    if (!isResourcePage && !isFolderPage) return;
-
-    if (isFolderPage) {
+    if (isResourcePage) {
+        handleResourcePage();
+    } else if (isFolderPage) {
         handleFolderPage();
-        return;
+    } else if (isPluginFile) {
+        handlePluginFilePage();
     }
-
-    handleResourcePage();
+    // いずれにも該当しなければ何もしない
 
     // =================================================================
     // リソースページ処理 (ゼロクリック自動DL)
@@ -43,6 +49,21 @@
         if (!isPdfUrl(pluginfileUrl)) return;
 
         triggerDownload(pluginfileUrl);
+    }
+
+    // =================================================================
+    // pluginfile.php 直接アクセス処理
+    // Moodleの「自動」表示設定では /mod/resource/view.php に遷移せず
+    // 直接 /pluginfile.php/... にリダイレクトされてブラウザのPDFビューアで開かれる。
+    // この場合、現在のURL自体がPDFなので、そのままダウンロードを発火する。
+    // =================================================================
+    function handlePluginFilePage() {
+        const currentUrl = location.href;
+        if (!isPdfUrl(currentUrl)) return;
+
+        // pluginfile.php の URL パスからコースに関する情報は取れないが、
+        // body クラスから取得を試みる。取れない場合は background 側でフォールバック。
+        triggerDownload(currentUrl);
     }
 
     // =================================================================
@@ -94,7 +115,9 @@
 
     function isPdfUrl(url) {
         try {
-            return new URL(url).pathname.toLowerCase().endsWith('.pdf');
+            // クエリパラメータを除外したパス部分で判定
+            const pathname = new URL(url).pathname.toLowerCase();
+            return pathname.endsWith('.pdf');
         } catch (e) {
             return url.toLowerCase().includes('.pdf');
         }
