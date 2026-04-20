@@ -199,12 +199,33 @@ async function fetchCourseName(courseId) {
         return cleaned;
     }
 
-    // フォールバック: 画面のh1要素から取得 (view.php, section.php 等共通)
-    const h1 = document.querySelector('.page-header-headings h1');
-    if (h1) {
-        const cleaned = cleanCourseName(h1.textContent.trim());
-        log('h1 からコース名取得:', cleaned);
-        return cleaned;
+    let courseNameStr = null;
+
+    // フォールバック1: パンくずリストや左ドロワー内のコースリンクテキストを使う
+    const navLink = document.querySelector(`a[href*="/course/view.php?id=${courseId}"]`);
+    if (navLink) {
+        courseNameStr = navLink.textContent.trim();
+        log('DOMのリンクからコース名取得:', courseNameStr);
+    } 
+    // フォールバック2: <title> タグから抽出 (例: "コース: 経営情報論 (BA), セクション: Week2")
+    else if (document.title.includes('コース:')) {
+        const titleMatch = document.title.match(/コース:\s*([^,]+)/);
+        if (titleMatch) {
+            courseNameStr = titleMatch[1].trim();
+            log('タイトルからコース名取得:', courseNameStr);
+        }
+    }
+    // フォールバック3: view.php なら h1 を信用する（旧仕様に戻す）
+    else if (window.location.pathname.startsWith('/course/view.php')) {
+        const h1 = document.querySelector('.page-header-headings h1');
+        if (h1) {
+            courseNameStr = h1.textContent.trim();
+            log('h1からコース名取得:', courseNameStr);
+        }
+    }
+
+    if (courseNameStr && courseNameStr.length > 0) {
+        return cleanCourseName(courseNameStr);
     }
 
     return null;
