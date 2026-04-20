@@ -139,7 +139,7 @@
 
         } catch (e) {
             console.error("[Moodle Enhancer] F1 展開エラー:", e);
-            contentContainer.innerHTML = \`<div class="me-status-box me-error-box">⚠️ データの取得に失敗しました。(\${e.message})</div>\`;
+            contentContainer.innerHTML = `<div class="me-status-box me-error-box">⚠️ データの取得に失敗しました。(${e.message})</div>`;
         }
     }
 
