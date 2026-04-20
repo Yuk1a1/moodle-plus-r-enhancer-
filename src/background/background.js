@@ -287,6 +287,16 @@ chrome.downloads.onDeterminingFilename.addListener(function (downloadItem, sugge
                 courseId = extractCourseIdFromUrl(downloadItem.url);
             }
 
+            // 3.5. 直近のクリック履歴（lastClickedCourseId）から取得（強力なフォールバック）
+            if (!courseId) {
+                const { lastClickedCourseId, lastClickedCourseTime } = await chrome.storage.local.get(['lastClickedCourseId', 'lastClickedCourseTime']);
+                // 10秒以内（10000ms）のクリックであれば、それが原因のダウンロードとみなす
+                if (lastClickedCourseId && lastClickedCourseTime && (Date.now() - lastClickedCourseTime < 10000)) {
+                    courseId = lastClickedCourseId;
+                    bgLog('onDeterminingFilename: lastClickedCourseId から復元 ->', courseId);
+                }
+            }
+
             // 4. アクティブタブから取得（フォールバック）
             if (!courseId) {
                 try {
@@ -370,7 +380,15 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         // コースIDを探る（ベストエフォート）
         let courseId = null;
         try {
-            if (tab.openerTabId) {
+            // 1. 直近のクリック履歴（lastClickedCourseId）から取得（最も確実）
+            const { lastClickedCourseId, lastClickedCourseTime } = await chrome.storage.local.get(['lastClickedCourseId', 'lastClickedCourseTime']);
+            if (lastClickedCourseId && lastClickedCourseTime && (Date.now() - lastClickedCourseTime < 10000)) {
+                courseId = lastClickedCourseId;
+                bgLog('PDF自動DL: lastClickedCourseId から復元 ->', courseId);
+            }
+
+            // 2. openerTabId から親タブをたどる
+            if (!courseId && tab.openerTabId) {
                 const opener = await chrome.tabs.get(tab.openerTabId);
                 if (opener.url) {
                     courseId = extractCourseIdFromUrl(opener.url);

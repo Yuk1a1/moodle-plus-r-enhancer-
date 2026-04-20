@@ -70,6 +70,57 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // =============================================================================
+// クリック時のコースコンテキストトラッキング（自動ダウンロード用のフォールバック）
+// =============================================================================
+
+/**
+ * ユーザーがリンクをクリックした瞬間、それがどのコースに属しているかを判定し保存する。
+ * これにより、/course/section.php のようなコースIDを持たないURLや、ダッシュボードから
+ * 直接PDF等へ遷移した場合でも、バックグラウンドスクリプトが元のコースを特定できる。
+ */
+document.addEventListener('click', (e) => {
+    const link = e.target.closest('a');
+    if (!link) return;
+
+    let courseId = null;
+
+    // 1. もし自分のリンクがコースそのものを指しているなら（ダッシュボードの時間割カードなど）
+    try {
+        const url = new URL(link.href);
+        if (url.pathname.includes('/course/view.php')) {
+            courseId = url.searchParams.get('id');
+        }
+    } catch(err) {}
+
+    // 2. もしダッシュボードからのクリックなら、親要素（時間割セルやリスト）からコースへのリンクを探す
+    if (!courseId) {
+        const container = link.closest('.me-timetable-card, .list-group-item, .event, .card, .block, tr');
+        if (container) {
+            const courseLink = container.querySelector('a[href*="/course/view.php?id="]');
+            if (courseLink) {
+                try {
+                    courseId = new URL(courseLink.href).searchParams.get('id');
+                } catch(err) {}
+            }
+        }
+    }
+
+    // 3. それでも分からなければ、現在開いているページ自体のBodyからコースIDを取得（section.php などの場合）
+    if (!courseId) {
+        courseId = getCourseIdFromBody();
+    }
+
+    // キャッシュ保存
+    if (courseId && courseId !== '1') {
+        chrome.storage.local.set({ 
+            lastClickedCourseId: courseId,
+            lastClickedCourseTime: Date.now()
+        });
+        log('クリックコンテキストとしてコースを保存:', courseId);
+    }
+}, true); // キャプチャフェーズで確実に処理
+
+// =============================================================================
 // 初期化
 // =============================================================================
 
