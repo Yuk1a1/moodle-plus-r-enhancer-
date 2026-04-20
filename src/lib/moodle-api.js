@@ -199,14 +199,12 @@ async function fetchCourseName(courseId) {
         return cleaned;
     }
 
-    // フォールバック: コースページの場合のみ h1 を使用
-    if (window.location.pathname.startsWith('/course/view.php')) {
-        const h1 = document.querySelector('.page-header-headings h1');
-        if (h1) {
-            const cleaned = cleanCourseName(h1.textContent.trim());
-            log('h1 からコース名取得:', cleaned);
-            return cleaned;
-        }
+    // フォールバック: 画面のh1要素から取得 (view.php, section.php 等共通)
+    const h1 = document.querySelector('.page-header-headings h1');
+    if (h1) {
+        const cleaned = cleanCourseName(h1.textContent.trim());
+        log('h1 からコース名取得:', cleaned);
+        return cleaned;
     }
 
     return null;
