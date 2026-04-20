@@ -58,6 +58,9 @@
             <button class="me-btn me-btn-collapse-all" title="展開された資料をすべて閉じます" style="display:none;">
                 📁 すべて折りたたむ
             </button>
+            <button class="me-btn me-btn-refresh" title="目次データを再取得して展開をやり直します">
+                🔄 再取得
+            </button>
         `;
 
         const expandBtn = controls.querySelector('.me-btn-expand-all');
@@ -76,6 +79,35 @@
             collapseBtn.style.display = 'none';
             expandBtn.style.display = 'inline-flex';
         });
+
+        const refreshBtn = controls.querySelector('.me-btn-refresh');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', async () => {
+                refreshBtn.innerHTML = '<span class="me-spinner"></span>再取得中...';
+                
+                // キャッシュとレンダリング状態をクリア
+                apiCache = null;
+                document.querySelectorAll('.me-section-content').forEach(container => {
+                    container.dataset.rendered = "false";
+                    container.innerHTML = '';
+                    container.classList.remove('me-expanded');
+                });
+                // 各トグルボタンを初期状態に戻す
+                document.querySelectorAll('.me-section-toggle').forEach(btn => {
+                    btn.textContent = '▼ 展開';
+                    btn.style.display = 'inline-block';
+                });
+
+                collapseBtn.style.display = 'none';
+                
+                // 再展開
+                await expandAllSections();
+                
+                refreshBtn.innerHTML = '🔄 再取得';
+                expandBtn.style.display = 'none';
+                collapseBtn.style.display = 'inline-flex';
+            });
+        }
 
         container.prepend(controls);
     }
