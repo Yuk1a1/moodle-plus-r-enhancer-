@@ -367,10 +367,38 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         const downloadUrl = new URL(tab.url);
         downloadUrl.searchParams.set('forcedownload', '1');
 
+        // コースIDを探る（ベストエフォート）
+        let courseId = null;
+        try {
+            if (tab.openerTabId) {
+                const opener = await chrome.tabs.get(tab.openerTabId);
+                if (opener.url) {
+                    courseId = extractCourseIdFromUrl(opener.url);
+                    if (!courseId) courseId = await getCourseIdFromTab(opener.url);
+                }
+            }
+            if (!courseId) {
+                // 他に開いているMoodleコースタブがあればそれを採用
+                const tabs = await chrome.tabs.query({ url: 'https://lms.ritsumei.ac.jp/*' });
+                const courseTab = tabs.find(t => t.url.includes('/course/view.php'));
+                if (courseTab) courseId = extractCourseIdFromUrl(courseTab.url);
+            }
+        } catch (e) {
+            bgLog('PDF自動DL コースID特定スキップ:', e);
+        }
+
+        const courseName = await resolveCourseName(courseId);
+        const sanitizedCourseName = sanitizeForFilename(courseName);
+
+        // URLから元のファイル名をデコード
+        const pathParts = url.pathname.split('/');
+        const originalFilename = decodeURIComponent(pathParts[pathParts.length - 1]);
+
         bgLog('PDF自動DL (tabs.onUpdated): pluginfile.php 検知 →', downloadUrl.toString());
 
         const downloadId = await chrome.downloads.download({
             url: downloadUrl.toString(),
+            filename: `Moodle/${sanitizedCourseName}/${originalFilename}`,
             conflictAction: 'uniquify'
         });
 

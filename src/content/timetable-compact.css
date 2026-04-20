@@ -42,85 +42,95 @@ table.timetable td.highlight > div {
     width: 100% !important;
 }
 
-/* ----- 構造化表示: リンク → 縦Flex(授業名 / 教室+アイコン) ----- */
+/* ----- カード型UI ----- */
 
-table.timetable td.highlight a.active-course-name,
-table.timetable td.highlight a {
+/* リンクをカード化 */
+table.timetable td.highlight a.me-timetable-card {
     display: flex !important;
     flex-direction: column !important;
-    justify-content: center !important;
-    height: 100% !important;
-    width: 100% !important;
+    align-items: flex-start !important;
+    background: var(--bs-body-bg, #fff) !important;
+    border: 1px solid var(--bs-border-color, #dee2e6) !important;
+    border-radius: 6px !important;
+    padding: 3px 4px !important;
     text-decoration: none !important;
     color: inherit !important;
-    overflow: hidden !important;
-    gap: 1px !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
+    transition: box-shadow 0.2s, transform 0.1s, border-color 0.2s !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin-bottom: 2px !important;
 }
 
-/* 1行目: 授業名 */
-table.timetable td.highlight .me-course-name {
-    display: block !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    font-size: clamp(0.6rem, 1.1vw, 0.75rem) !important;
-    line-height: 1.3 !important;
-    font-weight: 500 !important;
+table.timetable td.highlight a.me-timetable-card:hover {
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12) !important;
+    border-color: var(--bs-primary, #0d6efd) !important;
 }
 
-/* 2行目: 教室 + アイコンの横並び */
-table.timetable td.highlight .me-course-bottom {
+/* 第1レイヤー：ヘッダー（コードとアイコン） */
+table.timetable td.highlight .me-card-header {
     display: flex !important;
+    justify-content: space-between !important;
     align-items: center !important;
-    gap: 3px !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    min-height: 0 !important;
+    width: 100% !important;
+    margin-bottom: 1px !important;
 }
 
-/* 教室名: 青色・太字で視認性UP */
-table.timetable td.highlight .me-course-room {
-    display: inline-block !important;
+/* 授業コード */
+table.timetable td.highlight .me-course-code {
+    font-size: 0.6rem !important; 
+    color: #6c757d !important;
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+    line-height: 1 !important;
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
-    font-size: clamp(0.55rem, 1vw, 0.7rem) !important;
-    line-height: 1.2 !important;
-    color: var(--bs-primary, #0d6efd) !important;
-    font-weight: 600 !important;
-    flex-shrink: 1 !important;
 }
 
-/* アイコンコンテナ: 横並びで詰める */
-table.timetable td.highlight .me-course-icons {
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 2px !important;
+/* アイコン領域 */
+table.timetable td.highlight .me-icons {
+    display: flex !important;
+    gap: 3px !important;
     flex-shrink: 0 !important;
 }
 
-/* アイコン自体を小さく統一 */
-table.timetable td.highlight .me-course-icons i,
-table.timetable td.highlight .me-course-icons img,
-table.timetable td.highlight .me-course-icons svg {
-    font-size: 0.6rem !important;
-    width: 10px !important;
-    height: 10px !important;
-    line-height: 1 !important;
+/* アイコン自体のサイズ（少し大きめに再設定） */
+table.timetable td.highlight .me-icons img,
+table.timetable td.highlight .me-icons svg {
+    width: 12px !important;
+    height: 12px !important;
     vertical-align: middle !important;
 }
 
-/* パース不能なセルのフォールバック（従来通り2行clamp） */
-table.timetable td.highlight span:not(.me-course-name):not(.me-course-room):not(.me-course-bottom):not(.me-course-icons) {
+/* 第2レイヤー：授業名 */
+table.timetable td.highlight .me-course-title {
+    font-size: clamp(0.6rem, 1vw, 0.75rem) !important;
+    font-weight: 600 !important;
+    color: var(--bs-primary, #0f6cbf) !important;
+    line-height: 1.1 !important;
     display: -webkit-box !important;
     -webkit-line-clamp: 2 !important;
     -webkit-box-orient: vertical !important;
-    white-space: normal !important;
+    overflow: hidden !important;
+    margin-bottom: 2px !important;
+    text-align: left !important;
+    word-break: break-all !important;
+}
+
+/* 第3レイヤー：教室名 */
+table.timetable td.highlight .me-course-room {
+    font-size: clamp(0.55rem, 1vw, 0.65rem) !important;
+    color: #495057 !important;
+    line-height: 1.1 !important;
+    white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
-    font-size: clamp(0.6rem, 1.1vw, 0.75rem) !important;
-    line-height: 1.2 !important;
+    display: block !important;
+    text-align: left !important;
+    width: 100% !important;
 }
+
+
 
 /* アイコン類のデフォルト保護（パース不能セル向け） */
 table.timetable td.highlight i,
