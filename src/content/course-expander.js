@@ -29,9 +29,19 @@
         sections.forEach(injectSectionToggle);
 
         // 常に自動で「すべて展開」を実行する（ゼロクリックUX）
+        // 注意：Moodleの左ドロワーは動的生成されるため、少し待つ必要がある
         const expandBtn = document.querySelector('.me-btn-expand-all');
         if (expandBtn) {
-            expandBtn.click();
+            let retryCount = 0;
+            const tryAutoExpand = setInterval(() => {
+                if (document.querySelector('.courseindex-section')) {
+                    clearInterval(tryAutoExpand);
+                    expandBtn.click();
+                } else if (retryCount > 10) {
+                    clearInterval(tryAutoExpand); // 5秒経っても出ないなら諦める
+                }
+                retryCount++;
+            }, 500);
         }
     }
 
@@ -155,10 +165,14 @@
     function scrapeCourseIndex() {
         const drawerContent = document.getElementById('courseindex-content');
         if (!drawerContent) {
-            throw new Error("コース目次要素(courseindex-content)が見つかりません。テーマが異なるか、まだ読み込まれていません。");
+            throw new Error("コース目次要素(courseindex-content)が見つかりません。");
         }
 
         const sections = Array.from(drawerContent.querySelectorAll('.courseindex-section'));
+        if (sections.length === 0) {
+            throw new Error("左側のコースインデックスがまだ読み込まれていません。もう少し待ってからお試しください。");
+        }
+
         const result = [];
 
         sections.forEach(sec => {
