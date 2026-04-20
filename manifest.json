@@ -40,9 +40,21 @@
     },
     {
       "matches": ["https://lms.ritsumei.ac.jp/my/*"],
-      "js": ["src/content/timetable-compact.js"],
-      "css": ["src/content/timetable-compact.css"],
+      "js": [
+        "src/lib/moodle-api.js",
+        "src/content/timetable-compact.js",
+        "src/content/assignment-tracker.js"
+      ],
+      "css": [
+        "src/content/timetable-compact.css",
+        "src/content/assignment-tracker.css"
+      ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://lms.ritsumei.ac.jp/calendar/view.php*"],
+      "css": ["src/content/calendar-optimize.css"],
+      "run_at": "document_start"
     }
   ],
   "icons": {
