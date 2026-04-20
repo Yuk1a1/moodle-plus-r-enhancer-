@@ -220,22 +220,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'FORCE_DOWNLOAD') {
         (async () => {
             try {
-                // 既存の解決ロジック（キャッシュ優先）を使う
-                const courseName = await resolveCourseName(message.courseId);
+                let courseId = message.courseId;
+
+                // 1. 直近のクリック履歴（lastClickedCourseId）から取得（強力なフォールバック）
+                if (!courseId) {
+                    const { lastClickedCourseId, lastClickedCourseTime } = await chrome.storage.local.get(['lastClickedCourseId', 'lastClickedCourseTime']);
+                    if (lastClickedCourseId && lastClickedCourseTime && (Date.now() - lastClickedCourseTime < 10000)) {
+                        courseId = lastClickedCourseId;
+                        bgLog('FORCE_DOWNLOAD: lastClickedCourseId から復元 ->', courseId);
+                    }
+                }
+
+                const courseName = await resolveCourseName(courseId);
                 const sanitizedCourseName = sanitizeForFilename(courseName);
 
+                // URLから元のファイル名をデコード
+                const urlObj = new URL(message.url);
+                const pathParts = urlObj.pathname.split('/');
+                let originalFilename = decodeURIComponent(pathParts[pathParts.length - 1]);
+                if (!originalFilename || originalFilename.indexOf('.') === -1) {
+                    originalFilename = 'document.pdf'; // 拡張子がない場合のフォールバック
+                }
+
+                const finalPath = `Moodle/${sanitizedCourseName}/${originalFilename}`;
+
                 // chrome.downloads.download API で直接ダウンロード
-                // filename に指定されたパスでフォルダ分けが実行される
                 const downloadId = await chrome.downloads.download({
                     url: message.url,
-                    filename: `Moodle/${sanitizedCourseName}/`,
+                    filename: finalPath,
                     conflictAction: 'uniquify'
                 });
 
                 if (downloadId) {
                     forceDownloadIds.add(downloadId);
                 }
-                bgLog("F2 自動DL開始 ID:", downloadId, `(フォルダ: ${sanitizedCourseName})`);
+                bgLog("F2 自動DL開始 ID:", downloadId, `(パス: ${finalPath})`);
             } catch (error) {
                 bgWarn("F2 自動DLエラー:", error);
             }
