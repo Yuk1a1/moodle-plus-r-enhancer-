@@ -287,6 +287,19 @@ chrome.downloads.onDeterminingFilename.addListener(function (downloadItem, sugge
                 courseId = extractCourseIdFromUrl(downloadItem.url);
             }
 
+            // 4. アクティブタブから取得（フォールバック）
+            if (!courseId) {
+                try {
+                    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                    if (activeTab?.url?.includes('lms.ritsumei.ac.jp')) {
+                        courseId = extractCourseIdFromUrl(activeTab.url);
+                        if (!courseId) {
+                            courseId = await getCourseIdFromTab(activeTab.url);
+                        }
+                    }
+                } catch (e) { /* ignore */ }
+            }
+
             // コースIDからコース名を解決
             const courseName = await resolveCourseName(courseId);
 
@@ -313,3 +326,58 @@ chrome.downloads.onDeterminingFilename.addListener(function (downloadItem, sugge
 
     return true; // 非同期処理のため true を返す
 });
+
+// =============================================================================
+// PDF 自動ダウンロード: pluginfile.php への直接遷移を検知
+// =============================================================================
+// Moodle の「自動」表示設定では mod/resource/view.php からサーバーサイドリダイレクトで
+// pluginfile.php に飛ばされ、ブラウザの PDF ビューアで開かれる。
+// content script が発火しないケースをバックグラウンドレベルで補完する。
+
+// 同じタブ+URLで複数回発火するのを防止
+const pdfAutoDownloadedTabs = new Set();
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    // status=complete のみ処理（URL変更中の中間状態を無視）
+    if (changeInfo.status !== 'complete') return;
+    if (!tab.url) return;
+
+    // 設定チェック
+    try {
+        const { settings } = await chrome.storage.sync.get('settings');
+        if (settings?.forceDownload === false) return;
+    } catch (e) { /* デフォルト ON */ }
+
+    try {
+        const url = new URL(tab.url);
+        if (url.hostname !== 'lms.ritsumei.ac.jp') return;
+        if (!url.pathname.startsWith('/pluginfile.php/')) return;
+        if (!url.pathname.toLowerCase().endsWith('.pdf')) return;
+        // すでに forcedownload=1 が付いている場合はスキップ（ダウンロードが始まっているはず）
+        if (url.searchParams.get('forcedownload') === '1') return;
+
+        // 同じタブ+URLの重複防止
+        const key = `${tabId}:${tab.url}`;
+        if (pdfAutoDownloadedTabs.has(key)) return;
+        pdfAutoDownloadedTabs.add(key);
+        // 30秒後にクリア（メモリリーク防止）
+        setTimeout(() => pdfAutoDownloadedTabs.delete(key), 30000);
+
+        // forcedownload=1 を付与してダウンロード実行
+        const downloadUrl = new URL(tab.url);
+        downloadUrl.searchParams.set('forcedownload', '1');
+
+        bgLog('PDF自動DL (tabs.onUpdated): pluginfile.php 検知 →', downloadUrl.toString());
+
+        const downloadId = await chrome.downloads.download({
+            url: downloadUrl.toString(),
+            conflictAction: 'uniquify'
+        });
+
+        if (downloadId) {
+            forceDownloadIds.add(downloadId);
+        }
+    } catch (e) {
+        bgWarn('PDF自動DL (tabs.onUpdated) エラー:', e);
+    }
+});

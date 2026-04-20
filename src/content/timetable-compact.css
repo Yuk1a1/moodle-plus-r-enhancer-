@@ -25,7 +25,6 @@ table.timetable th {
     max-height: 52px !important;
     padding: 2px 4px !important;
     vertical-align: middle !important;
-    /* ツールチップが切れるのを防ぐ */
     overflow: visible !important;
     box-sizing: border-box !important;
 }
@@ -43,7 +42,8 @@ table.timetable td.highlight > div {
     width: 100% !important;
 }
 
-/* リンク要素を縦並びFlexにして「授業名 + 教室」を2行で表示 */
+/* ----- 構造化表示: リンク → 縦Flex(授業名 / 教室+アイコン) ----- */
+
 table.timetable td.highlight a.active-course-name,
 table.timetable td.highlight a {
     display: flex !important;
@@ -57,7 +57,7 @@ table.timetable td.highlight a {
     gap: 1px !important;
 }
 
-/* 授業名: 1行で截断、省略記号 */
+/* 1行目: 授業名 */
 table.timetable td.highlight .me-course-name {
     display: block !important;
     white-space: nowrap !important;
@@ -68,9 +68,19 @@ table.timetable td.highlight .me-course-name {
     font-weight: 500 !important;
 }
 
-/* 教室名: 目立つように少し強調 */
+/* 2行目: 教室 + アイコンの横並び */
+table.timetable td.highlight .me-course-bottom {
+    display: flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    min-height: 0 !important;
+}
+
+/* 教室名: 青色・太字で視認性UP */
 table.timetable td.highlight .me-course-room {
-    display: block !important;
+    display: inline-block !important;
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
@@ -78,10 +88,30 @@ table.timetable td.highlight .me-course-room {
     line-height: 1.2 !important;
     color: var(--bs-primary, #0d6efd) !important;
     font-weight: 600 !important;
+    flex-shrink: 1 !important;
+}
+
+/* アイコンコンテナ: 横並びで詰める */
+table.timetable td.highlight .me-course-icons {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 2px !important;
+    flex-shrink: 0 !important;
+}
+
+/* アイコン自体を小さく統一 */
+table.timetable td.highlight .me-course-icons i,
+table.timetable td.highlight .me-course-icons img,
+table.timetable td.highlight .me-course-icons svg {
+    font-size: 0.6rem !important;
+    width: 10px !important;
+    height: 10px !important;
+    line-height: 1 !important;
+    vertical-align: middle !important;
 }
 
 /* パース不能なセルのフォールバック（従来通り2行clamp） */
-table.timetable td.highlight span:not(.me-course-name):not(.me-course-room) {
+table.timetable td.highlight span:not(.me-course-name):not(.me-course-room):not(.me-course-bottom):not(.me-course-icons) {
     display: -webkit-box !important;
     -webkit-line-clamp: 2 !important;
     -webkit-box-orient: vertical !important;
@@ -92,10 +122,9 @@ table.timetable td.highlight span:not(.me-course-name):not(.me-course-room) {
     line-height: 1.2 !important;
 }
 
-/* アイコン類（アナウンスメントのマークなど）は inline-block にして保護 */
+/* アイコン類のデフォルト保護（パース不能セル向け） */
 table.timetable td.highlight i,
-table.timetable td.highlight img,
-table.timetable td.highlight .icon {
+table.timetable td.highlight img.icon {
     display: inline-block !important;
     width: auto !important;
     height: auto !important;
@@ -110,7 +139,8 @@ table.timetable td.time {
     font-size: 0.7rem !important;
 }
 
-/* ホバー/タップ時のツールチップ */
+/* ----- ホバー/タップ時のツールチップ ----- */
+
 table.timetable td.highlight:hover,
 table.timetable td.highlight.me-tooltip-active {
     z-index: 100 !important;
