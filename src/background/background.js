@@ -208,74 +208,13 @@ async function resolveCourseName(courseId) {
     return 'moodle-files';
 }
 
-// =============================================================================
-// FORCE_DOWNLOAD による自動ダウンロード 
-// =============================================================================
 
-// FORCE_DOWNLOAD 経由で開始されたダウンロードの ID を記録
-// onDeterminingFilename での二重フォルダ分けを防止するため
-const forceDownloadIds = new Set();
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'FORCE_DOWNLOAD') {
-        (async () => {
-            try {
-                let courseId = message.courseId;
-
-                // 1. 直近のクリック履歴（lastClickedCourseId）から取得（強力なフォールバック）
-                if (!courseId) {
-                    const { lastClickedCourseId, lastClickedCourseTime } = await chrome.storage.local.get(['lastClickedCourseId', 'lastClickedCourseTime']);
-                    if (lastClickedCourseId && lastClickedCourseTime && (Date.now() - lastClickedCourseTime < 10000)) {
-                        courseId = lastClickedCourseId;
-                        bgLog('FORCE_DOWNLOAD: lastClickedCourseId から復元 ->', courseId);
-                    }
-                }
-
-                const courseName = await resolveCourseName(courseId);
-                const sanitizedCourseName = sanitizeForFilename(courseName);
-
-                // URLから元のファイル名をデコード
-                const urlObj = new URL(message.url);
-                const pathParts = urlObj.pathname.split('/');
-                let originalFilename = decodeURIComponent(pathParts[pathParts.length - 1]);
-                if (!originalFilename || originalFilename.indexOf('.') === -1) {
-                    originalFilename = 'document.pdf'; // 拡張子がない場合のフォールバック
-                }
-
-                const finalPath = `Moodle/${sanitizedCourseName}/${originalFilename}`;
-
-                // chrome.downloads.download API で直接ダウンロード
-                const downloadId = await chrome.downloads.download({
-                    url: message.url,
-                    filename: finalPath,
-                    conflictAction: 'uniquify'
-                });
-
-                if (downloadId) {
-                    forceDownloadIds.add(downloadId);
-                }
-                bgLog("F2 自動DL開始 ID:", downloadId, `(パス: ${finalPath})`);
-            } catch (error) {
-                bgWarn("F2 自動DLエラー:", error);
-            }
-        })();
-        return false;
-    }
-});
 
 // =============================================================================
 // ダウンロードファイル名の決定
 // =============================================================================
 
 chrome.downloads.onDeterminingFilename.addListener(function (downloadItem, suggest) {
-    // FORCE_DOWNLOAD 経由のDLはスキップ（既にフォルダ指定済み）
-    if (forceDownloadIds.has(downloadItem.id)) {
-        forceDownloadIds.delete(downloadItem.id);
-        bgLog(`二重フォルダ分け防止: DL-ID ${downloadItem.id} をスキップします`);
-        suggest({ filename: downloadItem.filename });
-        return true; 
-    }
-
     const moodleUrlPattern = 'https://lms.ritsumei.ac.jp/';
 
     // referrer または URL で Moodle からのダウンロードか判定
@@ -340,7 +279,7 @@ chrome.downloads.onDeterminingFilename.addListener(function (downloadItem, sugge
             // 新しいファイルパスを構築 (Moodle/[授業名]/[元のファイル名])
             const newFilename = `Moodle/${sanitizedCourseName}/${originalFilename}`;
 
-            bgLog('ファイル名提案:', newFilename);
+            console.log(`[TDD-ANALYSIS] [onDeterminingFilename] 提案パス: ${newFilename}`);
 
             suggest({
                 filename: newFilename,
@@ -356,93 +295,4 @@ chrome.downloads.onDeterminingFilename.addListener(function (downloadItem, sugge
     return true; // 非同期処理のため true を返す
 });
 
-// =============================================================================
-// PDF 自動ダウンロード: pluginfile.php への直接遷移を検知
-// =============================================================================
-// Moodle の「自動」表示設定では mod/resource/view.php からサーバーサイドリダイレクトで
-// pluginfile.php に飛ばされ、ブラウザの PDF ビューアで開かれる。
-// content script が発火しないケースをバックグラウンドレベルで補完する。
-
-// 同じタブ+URLで複数回発火するのを防止
-const pdfAutoDownloadedTabs = new Set();
-
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-    // status=complete のみ処理（URL変更中の中間状態を無視）
-    if (changeInfo.status !== 'complete') return;
-    if (!tab.url) return;
-
-    // 設定チェック
-    try {
-        const { settings } = await chrome.storage.sync.get('settings');
-        if (settings?.forceDownload === false) return;
-    } catch (e) { /* デフォルト ON */ }
-
-    try {
-        const url = new URL(tab.url);
-        if (url.hostname !== 'lms.ritsumei.ac.jp') return;
-        if (!url.pathname.startsWith('/pluginfile.php/')) return;
-        if (!url.pathname.toLowerCase().endsWith('.pdf')) return;
-        // すでに forcedownload=1 が付いている場合はスキップ（ダウンロードが始まっているはず）
-        if (url.searchParams.get('forcedownload') === '1') return;
-
-        // 同じタブ+URLの重複防止
-        const key = `${tabId}:${tab.url}`;
-        if (pdfAutoDownloadedTabs.has(key)) return;
-        pdfAutoDownloadedTabs.add(key);
-        // 30秒後にクリア（メモリリーク防止）
-        setTimeout(() => pdfAutoDownloadedTabs.delete(key), 30000);
-
-        // forcedownload=1 を付与してダウンロード実行
-        const downloadUrl = new URL(tab.url);
-        downloadUrl.searchParams.set('forcedownload', '1');
-
-        // コースIDを探る（ベストエフォート）
-        let courseId = null;
-        try {
-            // 1. 直近のクリック履歴（lastClickedCourseId）から取得（最も確実）
-            const { lastClickedCourseId, lastClickedCourseTime } = await chrome.storage.local.get(['lastClickedCourseId', 'lastClickedCourseTime']);
-            if (lastClickedCourseId && lastClickedCourseTime && (Date.now() - lastClickedCourseTime < 10000)) {
-                courseId = lastClickedCourseId;
-                bgLog('PDF自動DL: lastClickedCourseId から復元 ->', courseId);
-            }
-
-            // 2. openerTabId から親タブをたどる
-            if (!courseId && tab.openerTabId) {
-                const opener = await chrome.tabs.get(tab.openerTabId);
-                if (opener.url) {
-                    courseId = extractCourseIdFromUrl(opener.url);
-                    if (!courseId) courseId = await getCourseIdFromTab(opener.url);
-                }
-            }
-            if (!courseId) {
-                // 他に開いているMoodleコースタブがあればそれを採用
-                const tabs = await chrome.tabs.query({ url: 'https://lms.ritsumei.ac.jp/*' });
-                const courseTab = tabs.find(t => t.url.includes('/course/view.php'));
-                if (courseTab) courseId = extractCourseIdFromUrl(courseTab.url);
-            }
-        } catch (e) {
-            bgLog('PDF自動DL コースID特定スキップ:', e);
-        }
-
-        const courseName = await resolveCourseName(courseId);
-        const sanitizedCourseName = sanitizeForFilename(courseName);
-
-        // URLから元のファイル名をデコード
-        const pathParts = url.pathname.split('/');
-        const originalFilename = decodeURIComponent(pathParts[pathParts.length - 1]);
-
-        bgLog('PDF自動DL (tabs.onUpdated): pluginfile.php 検知 →', downloadUrl.toString());
-
-        const downloadId = await chrome.downloads.download({
-            url: downloadUrl.toString(),
-            filename: `Moodle/${sanitizedCourseName}/${originalFilename}`,
-            conflictAction: 'uniquify'
-        });
-
-        if (downloadId) {
-            forceDownloadIds.add(downloadId);
-        }
-    } catch (e) {
-        bgWarn('PDF自動DL (tabs.onUpdated) エラー:', e);
-    }
-});
+

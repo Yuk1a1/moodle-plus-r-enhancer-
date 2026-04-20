@@ -16,6 +16,7 @@
         // storage 未初期化時はデフォルト ON として続行
     }
 
+
     // body クラスからコースIDを取得するユーティリティ (content.js と重複)
     function getCourseIdFromBody() {
         const match = document.body.className.match(/course-(\d+)/);
@@ -139,12 +140,18 @@
             downloadUrl = pluginfileUrl + '?forcedownload=1';
         }
 
-        // background.js に「ダウンロードして」と依頼するだけ（コース名解決はbackgroundがやる）
-        chrome.runtime.sendMessage({
-            type: 'FORCE_DOWNLOAD',
-            url: downloadUrl,
-            courseId: courseId
-        });
+        // ======================= [TDD-ANALYSIS] =======================
+        console.groupCollapsed(`[TDD-ANALYSIS] PDF自動ダウンロード発火`);
+        console.log("1. 対象URL:", pluginfileUrl);
+        console.log("2. 変換後URL:", downloadUrl);
+        console.log("3. 推測されたCourse ID (bodyから):", courseId);
+        console.log("4. 現在のページの完全なURL:", location.href);
+        console.groupEnd();
+        // ==============================================================
+
+        // background.js に命令するのではなく、ブラウザに直接ダウンロードURLを踏ませる
+        // （forcedownload=1 が付いているため、Chromeは画面遷移せずネイティブにダウンロードを開始する）
+        window.location.replace(downloadUrl);
 
         showDownloadNotice();
         console.log('[Moodle Enhancer] PDF自動ダウンロード開始:', downloadUrl);
