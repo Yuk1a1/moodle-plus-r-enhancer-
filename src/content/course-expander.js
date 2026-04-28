@@ -5,7 +5,17 @@
  * インラインで展開/折りたたみを行う機能。
  */
 
-(function () {
+(async function () {
+    // =================================================================
+    // 0. 設定チェック — OFF なら即終了
+    // =================================================================
+    try {
+        const { settings } = await chrome.storage.sync.get('settings');
+        if (settings?.courseExpander === false) return;
+    } catch (e) {
+        // storage 未初期化時はデフォルト ON として続行
+    }
+
     // コーストップページ (/course/view.php) 以外は実行しない
     if (!location.pathname.startsWith('/course/view.php')) return;
 

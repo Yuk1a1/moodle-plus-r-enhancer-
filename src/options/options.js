@@ -1,5 +1,5 @@
 // options.js
-const SETTINGS_KEYS = ['forceDownload', 'timetableCompact', 'courseExpander'];
+const SETTINGS_KEYS = ['forceDownload', 'timetableCompact', 'courseExpander', 'alwaysActive'];
 
 // ページ読み込み時に設定を復元
 document.addEventListener('DOMContentLoaded', () => {

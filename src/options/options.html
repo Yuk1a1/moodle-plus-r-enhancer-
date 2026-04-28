@@ -9,6 +9,7 @@
         .setting { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
         .setting-label { font-size: 0.9rem; }
         .setting-desc { font-size: 0.75rem; color: #888; margin-top: 2px; }
+        .setting-warn { font-size: 0.7rem; color: #dc3545; margin-top: 2px; }
         .toggle { position: relative; width: 44px; height: 24px; }
         .toggle input { opacity: 0; width: 0; height: 0; }
         .toggle .slider { position: absolute; inset: 0; background: #ccc; border-radius: 24px; cursor: pointer; transition: 0.2s; }
@@ -47,6 +48,18 @@
     </div>
 
     <p class="saved" id="savedMsg">✅ 設定を保存しました</p>
+
+    <hr style="margin: 1.5rem 0; border: none; border-top: 1px solid #ddd;">
+    <h2 style="font-size: 1rem; color: #666; margin-bottom: 1rem;">🔬 実験的機能</h2>
+
+    <div class="setting">
+        <div>
+            <div class="setting-label">☕ 常時アクティブモード</div>
+            <div class="setting-desc">IntelliBoard の非アクティブ判定を無効化し、常に操作中に見せます</div>
+            <div class="setting-warn">⚠️ 自己責任でご利用ください</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="alwaysActive"><span class="slider"></span></label>
+    </div>
 
     <script src="options.js"></script>
 </body>
